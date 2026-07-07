@@ -27,8 +27,9 @@ export default function MachineDetail() {
       <div className="toolbar">
         <h1 className="page-title" style={{ margin: 0 }}>Machine #{number}</h1>
         <div className="spacer" />
+        <Link className="btn secondary" to="/machines">All machines</Link>
         {n > 1 && <Link className="btn secondary" to={`/machines/${n - 1}`}>← #{n - 1}</Link>}
-        {n < 40 && <Link className="btn" to={`/machines/${n + 1}`} style={{ color: '#fff', textDecoration: 'none', padding: '8px 14px', borderRadius: 8 }}>#{n + 1} →</Link>}
+        {n < 40 && <Link className="btn" to={`/machines/${n + 1}`}>#{n + 1} →</Link>}
       </div>
       <div className="page-sub">{summary.days} day{summary.days === 1 ? '' : 's'} on record · active {summary.active_days}</div>
 
