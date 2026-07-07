@@ -5,18 +5,122 @@ export const dashboardRouter = Router();
 export const machinesRouter = Router();
 
 const holdPct = (dIn, dOut) => (dIn > 0 ? Math.round(((dIn - dOut) / dIn) * 100) : null);
+const GRANULARITIES = new Set(['day', 'week', 'month', 'all']);
 
-// GET /api/dashboard?from&to
-dashboardRouter.get('/', (req, res) => {
-  const from = req.query.from || '0000-01-01';
-  const to = req.query.to || '9999-12-31';
+/** Bucket key for a YYYY-MM-DD date at a granularity (week = Monday start date). */
+function bucketKey(dateStr, g) {
+  if (g === 'month') return dateStr.slice(0, 7);
+  if (g === 'week') {
+    const d = new Date(`${dateStr}T00:00:00Z`);
+    d.setUTCDate(d.getUTCDate() - ((d.getUTCDay() + 6) % 7));
+    return d.toISOString().slice(0, 10);
+  }
+  return dateStr;
+}
 
-  const trend = db.prepare(`
-    SELECT id, sheet_date, total_in, total_out, meter_profit, cash_profit, over_short, status
-    FROM sheets WHERE sheet_date BETWEEN ? AND ? ORDER BY sheet_date
+/** Inclusive from/to date range covered by a bucket. */
+function bucketRange(key, g) {
+  if (g === 'month') {
+    const [y, m] = key.split('-').map(Number);
+    const to = new Date(Date.UTC(y, m, 0)).toISOString().slice(0, 10);
+    return { from: `${key}-01`, to };
+  }
+  if (g === 'week') {
+    const d = new Date(`${key}T00:00:00Z`);
+    d.setUTCDate(d.getUTCDate() + 6);
+    return { from: key, to: d.toISOString().slice(0, 10) };
+  }
+  return { from: key, to: key };
+}
+
+const MONTHS = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+const shortDate = (d) => `${MONTHS[Number(d.slice(5, 7)) - 1]} ${Number(d.slice(8, 10))}`;
+
+function bucketLabel(key, g) {
+  if (g === 'month') return `${MONTHS[Number(key.slice(5, 7)) - 1]} ${key.slice(0, 4)}`;
+  if (g === 'week') {
+    const { to } = bucketRange(key, g);
+    return `${shortDate(key)}–${shortDate(to)}`;
+  }
+  return key;
+}
+
+/** Alerts computed over an aggregated date range (a day, a week, or a month). */
+function alertsForRange(from, to, scopeLabel) {
+  const alerts = [];
+
+  const agg = db.prepare(`
+    SELECT mr.machine_number, SUM(mr.daily_in) AS in_sum, SUM(mr.daily_out) AS out_sum
+    FROM machine_readings mr JOIN sheets s ON s.id = mr.sheet_id
+    WHERE s.sheet_date BETWEEN ? AND ?
+    GROUP BY mr.machine_number ORDER BY mr.machine_number
   `).all(from, to);
 
-  const totals = trend.reduce(
+  for (const r of agg) {
+    const h = holdPct(r.in_sum, r.out_sum);
+    if (r.out_sum >= 1000 && r.out_sum > r.in_sum * 2) {
+      alerts.push({
+        machine: r.machine_number, level: 'high',
+        message: `Machine ${r.machine_number} paid out $${r.out_sum.toLocaleString()} against $${r.in_sum.toLocaleString()} played ${scopeLabel}`,
+      });
+    } else if (r.in_sum === 0 && r.out_sum > 0) {
+      alerts.push({
+        machine: r.machine_number, level: 'high',
+        message: `Machine ${r.machine_number} paid out $${r.out_sum.toLocaleString()} with $0 played ${scopeLabel}`,
+      });
+    } else if (h != null && h < -100) {
+      alerts.push({
+        machine: r.machine_number, level: 'medium',
+        message: `Machine ${r.machine_number} hold is ${h}% ${scopeLabel} (in $${r.in_sum.toLocaleString()}, out $${r.out_sum.toLocaleString()})`,
+      });
+    }
+  }
+
+  const cash = db.prepare(
+    'SELECT SUM(over_short) AS os FROM sheets WHERE sheet_date BETWEEN ? AND ? AND over_short IS NOT NULL'
+  ).get(from, to).os;
+  if (cash != null && cash <= -100) {
+    alerts.unshift({
+      machine: null, level: 'high',
+      message: `Cash short $${Math.abs(cash).toLocaleString()} ${scopeLabel}`,
+    });
+  }
+
+  return alerts;
+}
+
+// GET /api/dashboard?granularity=day|week|month|all
+dashboardRouter.get('/', (req, res) => {
+  const g = GRANULARITIES.has(req.query.granularity) ? req.query.granularity : 'all';
+  const chartGran = g === 'all' ? 'day' : g;
+
+  const sheets = db.prepare(`
+    SELECT id, sheet_date, total_in, total_out, meter_profit, cash_profit, over_short
+    FROM sheets ORDER BY sheet_date
+  `).all();
+
+  // Group sheets into buckets at the chart granularity
+  const map = new Map();
+  for (const s of sheets) {
+    const key = bucketKey(s.sheet_date, chartGran);
+    if (!map.has(key)) {
+      map.set(key, {
+        period: key, label: bucketLabel(key, chartGran),
+        total_in: 0, total_out: 0, meter_profit: 0,
+        cash_profit: null, over_short: null, sheet_count: 0,
+      });
+    }
+    const b = map.get(key);
+    b.total_in += s.total_in || 0;
+    b.total_out += s.total_out || 0;
+    b.meter_profit += s.meter_profit || 0;
+    if (s.cash_profit != null) b.cash_profit = (b.cash_profit || 0) + s.cash_profit;
+    if (s.over_short != null) b.over_short = (b.over_short || 0) + s.over_short;
+    b.sheet_count += 1;
+  }
+  const buckets = [...map.values()].map((b) => ({ ...b, hold_pct: holdPct(b.total_in, b.total_out) }));
+
+  const totals = sheets.reduce(
     (acc, s) => ({
       total_in: acc.total_in + (s.total_in || 0),
       total_out: acc.total_out + (s.total_out || 0),
@@ -26,70 +130,83 @@ dashboardRouter.get('/', (req, res) => {
     }),
     { total_in: 0, total_out: 0, meter_profit: 0, cash_profit: 0, over_short: 0 }
   );
+  totals.hold_pct = holdPct(totals.total_in, totals.total_out);
+  totals.match = db.prepare('SELECT COALESCE(SUM(match_amount),0) AS m FROM sheets').get().m;
 
-  const expenseRows = db.prepare(`
-    SELECT e.category, SUM(e.amount) AS amount
-    FROM expenses e JOIN sheets s ON s.id = e.sheet_id
-    WHERE s.sheet_date BETWEEN ? AND ?
-    GROUP BY e.category ORDER BY amount DESC
-  `).all(from, to);
+  const latestDate = sheets.length ? sheets[sheets.length - 1].sheet_date : null;
 
-  const matchTotal = db.prepare(`
-    SELECT COALESCE(SUM(match_amount),0) AS m FROM sheets WHERE sheet_date BETWEEN ? AND ?
-  `).get(from, to).m;
-
-  // Alerts from the latest sheet: extreme negative hold, big payouts, dead machines
-  const latest = trend[trend.length - 1];
-  const alerts = [];
-  if (latest) {
-    const readings = db.prepare(
-      'SELECT * FROM machine_readings WHERE sheet_id = ? ORDER BY machine_number'
-    ).all(latest.id);
-    for (const r of readings) {
-      const h = holdPct(r.daily_in, r.daily_out);
-      if (r.daily_out > 0 && r.daily_out >= 1000 && r.daily_out > r.daily_in * 2) {
-        alerts.push({
-          machine: r.machine_number, date: latest.sheet_date, level: 'high',
-          message: `Machine ${r.machine_number} paid out $${r.daily_out.toLocaleString()} against $${r.daily_in.toLocaleString()} in`,
-        });
-      } else if (h != null && h < -100) {
-        alerts.push({
-          machine: r.machine_number, date: latest.sheet_date, level: 'medium',
-          message: `Machine ${r.machine_number} hold is ${h}% (in $${r.daily_in.toLocaleString()}, out $${r.daily_out.toLocaleString()})`,
-        });
-      }
-    }
-    if (latest.over_short != null && latest.over_short <= -100) {
-      alerts.unshift({
-        machine: null, date: latest.sheet_date, level: 'high',
-        message: `Cash short $${Math.abs(latest.over_short).toLocaleString()} on ${latest.sheet_date}`,
-      });
+  // Current period (latest bucket) + previous for comparison, and alert/expense scope
+  let current = null;
+  let previous = null;
+  let scope = null;
+  if (latestDate) {
+    if (g === 'all') {
+      scope = { from: '0000-01-01', to: '9999-12-31', label: 'all time' };
+    } else {
+      current = buckets[buckets.length - 1];
+      previous = buckets.length > 1 ? buckets[buckets.length - 2] : null;
+      const range = bucketRange(current.period, g);
+      const label = g === 'day' ? `on ${current.period}` : `during ${current.label}`;
+      scope = { ...range, label };
     }
   }
 
-  // Dead machines: zero daily_in across every sheet in range
-  const dead = db.prepare(`
-    SELECT machine_number FROM machine_readings mr JOIN sheets s ON s.id = mr.sheet_id
-    WHERE s.sheet_date BETWEEN ? AND ?
-    GROUP BY machine_number HAVING SUM(mr.daily_in) = 0 AND COUNT(*) >= 2
-    ORDER BY machine_number
-  `).all(from, to).map((r) => r.machine_number);
+  const alerts = scope ? alertsForRange(scope.from, scope.to, scope.label) : [];
+
+  const expenses = scope
+    ? db.prepare(`
+        SELECT e.category, SUM(e.amount) AS amount
+        FROM expenses e JOIN sheets s ON s.id = e.sheet_id
+        WHERE s.sheet_date BETWEEN ? AND ?
+        GROUP BY e.category ORDER BY amount DESC
+      `).all(scope.from, scope.to)
+    : [];
+
+  const scopedMatch = scope
+    ? db.prepare('SELECT COALESCE(SUM(match_amount),0) AS m FROM sheets WHERE sheet_date BETWEEN ? AND ?')
+        .get(scope.from, scope.to).m
+    : 0;
+
+  const deadMachines = scope
+    ? db.prepare(`
+        SELECT machine_number FROM machine_readings mr JOIN sheets s ON s.id = mr.sheet_id
+        WHERE s.sheet_date BETWEEN ? AND ?
+        GROUP BY machine_number HAVING SUM(mr.daily_in) = 0
+        ORDER BY machine_number
+      `).all(scope.from, scope.to).map((r) => r.machine_number)
+    : [];
 
   res.json({
-    trend: trend.map((s) => ({ ...s, hold_pct: holdPct(s.total_in, s.total_out) })),
-    totals: { ...totals, hold_pct: holdPct(totals.total_in, totals.total_out), match: matchTotal },
-    expenses: expenseRows,
+    granularity: g,
+    buckets,
+    totals,
+    current,
+    previous,
+    scopeLabel: scope?.label ?? null,
     alerts,
-    deadMachines: dead,
-    sheetCount: trend.length,
-    latestDate: latest?.sheet_date ?? null,
+    expenses,
+    match: scopedMatch,
+    deadMachines,
+    sheetCount: sheets.length,
+    latestDate,
   });
 });
 
-// GET /api/machines — per-machine aggregates across all sheets
+// GET /api/machines?granularity=day|week|month|all — stats scoped to the latest period
 machinesRouter.get('/', (req, res) => {
-  const from = req.query.from || '0000-01-01';
-  const to = req.query.to || '9999-12-31';
+  const g = GRANULARITIES.has(req.query.granularity) ? req.query.granularity : 'all';
+
+  let from = '0000-01-01';
+  let to = '9999-12-31';
+  let label = 'all time';
+  if (g !== 'all') {
+    const latest = db.prepare('SELECT MAX(sheet_date) AS d FROM sheets').get().d;
+    if (latest) {
+      const key = bucketKey(latest, g);
+      ({ from, to } = bucketRange(key, g));
+      label = g === 'day' ? latest : bucketLabel(key, g);
+    }
+  }
 
   const rows = db.prepare(`
     SELECT mr.machine_number,
@@ -105,18 +222,21 @@ machinesRouter.get('/', (req, res) => {
     GROUP BY mr.machine_number ORDER BY mr.machine_number
   `).all(from, to);
 
-  res.json(rows.map((r) => {
+  const machines = rows.map((r) => {
     const net = (r.total_in || 0) - (r.total_out || 0);
     const hold = holdPct(r.total_in, r.total_out);
     let flag = null;
-    if (r.total_in === 0) flag = 'dead';
+    if (r.total_in === 0 && r.total_out === 0) flag = 'dead';
+    else if (r.total_in === 0 && r.total_out > 0) flag = 'bleeding';
     else if (hold != null && hold < -50) flag = 'bleeding';
     else if (hold != null && hold < 0) flag = 'negative';
     return { ...r, net, hold_pct: hold, flag };
-  }));
+  });
+
+  res.json({ scope: { granularity: g, from, to, label }, machines });
 });
 
-// GET /api/machines/:number — daily series for one machine
+// GET /api/machines/:number — daily series for one machine (full history)
 machinesRouter.get('/:number', (req, res) => {
   const n = Number(req.params.number);
   if (!Number.isInteger(n) || n < 1) return res.status(400).json({ error: 'Invalid machine number' });

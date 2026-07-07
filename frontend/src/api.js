@@ -17,7 +17,7 @@ async function request(path, options = {}) {
 export const api = {
   health: () => request('/api/health'),
   dashboard: (params = '') => request(`/api/dashboard${params}`),
-  machines: () => request('/api/machines'),
+  machines: (params = '') => request(`/api/machines${params}`),
   machine: (n) => request(`/api/machines/${n}`),
   sheets: () => request('/api/sheets'),
   sheet: (id) => request(`/api/sheets/${id}`),
