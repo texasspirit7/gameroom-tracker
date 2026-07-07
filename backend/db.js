@@ -8,8 +8,6 @@ db.exec(`
   PRAGMA journal_mode = WAL;
   PRAGMA foreign_keys = ON;
 
-  -- Users table is scaffolding for the future Google-auth + admin-approval phase.
-  -- Auth is NOT enforced while AUTH_ENABLED != 'true'.
   CREATE TABLE IF NOT EXISTS users (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     email TEXT NOT NULL UNIQUE,
@@ -63,7 +61,19 @@ db.exec(`
     note TEXT
   );
 
+  -- Recurring overhead costs (rent, electricity, etc.) — independent of daily sheets
+  CREATE TABLE IF NOT EXISTS other_expenses (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    expense_date TEXT NOT NULL,                     -- YYYY-MM-DD
+    category TEXT NOT NULL,
+    amount REAL NOT NULL DEFAULT 0,
+    note TEXT,
+    created_by TEXT,
+    created_at TEXT NOT NULL DEFAULT (datetime('now'))
+  );
+
   CREATE INDEX IF NOT EXISTS idx_sheets_date ON sheets(sheet_date);
   CREATE INDEX IF NOT EXISTS idx_readings_sheet ON machine_readings(sheet_id);
   CREATE INDEX IF NOT EXISTS idx_readings_machine ON machine_readings(machine_number);
+  CREATE INDEX IF NOT EXISTS idx_other_expenses_date ON other_expenses(expense_date);
 `);

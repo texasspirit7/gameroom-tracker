@@ -9,6 +9,7 @@ import { api, fmt, signedMoney } from '../api.js';
 export default function MachineDetail() {
   const { number } = useParams();
   const [data, setData] = useState(null);
+  const [meta, setMeta] = useState(null);
   const [error, setError] = useState(null);
 
   useEffect(() => {
@@ -16,11 +17,17 @@ export default function MachineDetail() {
     api.machine(number).then(setData).catch((e) => setError(e.message));
   }, [number]);
 
+  useEffect(() => {
+    api.machinesMeta().then(setMeta).catch(() => {});
+  }, []);
+
   if (error) return <div className="error-box">{error}</div>;
   if (!data) return <p className="muted"><span className="spinner" />Loading…</p>;
 
   const { summary, series } = data;
   const n = Number(number);
+  const min = meta?.min ?? 1;
+  const max = meta?.max ?? n;
 
   return (
     <>
@@ -28,8 +35,8 @@ export default function MachineDetail() {
         <h1 className="page-title" style={{ margin: 0 }}>Machine #{number}</h1>
         <div className="spacer" />
         <Link className="btn secondary" to="/machines">All machines</Link>
-        {n > 1 && <Link className="btn secondary" to={`/machines/${n - 1}`}>← #{n - 1}</Link>}
-        {n < 40 && <Link className="btn" to={`/machines/${n + 1}`}>#{n + 1} →</Link>}
+        {n > min && <Link className="btn secondary" to={`/machines/${n - 1}`}>← #{n - 1}</Link>}
+        {n < max && <Link className="btn" to={`/machines/${n + 1}`}>#{n + 1} →</Link>}
       </div>
       <div className="page-sub">{summary.days} day{summary.days === 1 ? '' : 's'} on record · active {summary.active_days}</div>
 

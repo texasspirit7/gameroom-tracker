@@ -52,10 +52,13 @@ function resolveRange(req) {
   if (from && to && DATE_RE.test(from) && DATE_RE.test(to) && from <= to) {
     return { from, to, allTime: false, label: label ? String(label) : `${from} to ${to}` };
   }
-  const bounds = db.prepare('SELECT MIN(sheet_date) AS min, MAX(sheet_date) AS max FROM sheets').get();
+  const sheetBounds = db.prepare('SELECT MIN(sheet_date) AS min, MAX(sheet_date) AS max FROM sheets').get();
+  const expenseBounds = db.prepare('SELECT MIN(expense_date) AS min, MAX(expense_date) AS max FROM other_expenses').get();
+  const mins = [sheetBounds.min, expenseBounds.min].filter(Boolean);
+  const maxs = [sheetBounds.max, expenseBounds.max].filter(Boolean);
   return {
-    from: bounds.min || '0001-01-01',
-    to: bounds.max || '9999-12-31',
+    from: mins.length ? mins.sort()[0] : '0001-01-01',
+    to: maxs.length ? maxs.sort().at(-1) : '9999-12-31',
     allTime: true,
     label: label ? String(label) : 'All Time',
   };
@@ -161,12 +164,24 @@ dashboardRouter.get('/', (req, res) => {
   }
   const buckets = [...map.values()].map((b) => ({ ...b, hold_pct: holdPct(b.total_in, b.total_out) }));
 
-  const expenses = db.prepare(`
+  const sheetExpenses = db.prepare(`
     SELECT e.category, SUM(e.amount) AS amount
     FROM expenses e JOIN sheets s ON s.id = e.sheet_id
     WHERE s.sheet_date BETWEEN ? AND ?
-    GROUP BY e.category ORDER BY amount DESC
+    GROUP BY e.category
   `).all(range.from, range.to);
+  const otherExpenses = db.prepare(`
+    SELECT category, SUM(amount) AS amount FROM other_expenses
+    WHERE expense_date BETWEEN ? AND ? GROUP BY category
+  `).all(range.from, range.to);
+  const expenseMap = new Map();
+  for (const e of [...sheetExpenses, ...otherExpenses]) {
+    expenseMap.set(e.category, (expenseMap.get(e.category) || 0) + e.amount);
+  }
+  const expenses = [...expenseMap.entries()]
+    .map(([category, amount]) => ({ category, amount }))
+    .sort((a, b) => b.amount - a.amount);
+  const otherExpensesTotal = otherExpenses.reduce((s, e) => s + e.amount, 0);
 
   const deadMachines = db.prepare(`
     SELECT machine_number FROM machine_readings mr JOIN sheets s ON s.id = mr.sheet_id
@@ -185,6 +200,7 @@ dashboardRouter.get('/', (req, res) => {
     buckets,
     alerts: alertsForRange(range.from, range.to, range.label),
     expenses,
+    otherExpensesTotal,
     deadMachines,
     latestDate,
   });
@@ -220,6 +236,13 @@ machinesRouter.get('/', (req, res) => {
   });
 
   res.json({ range: { from: range.from, to: range.to, label: range.label, allTime: range.allTime }, machines });
+});
+
+// GET /api/machines/meta — machine-number bounds actually present in the data
+// (used for prev/next navigation; sheets can have any number of machine rows, not just 40)
+machinesRouter.get('/meta', (req, res) => {
+  const row = db.prepare('SELECT MIN(machine_number) AS min, MAX(machine_number) AS max, COUNT(DISTINCT machine_number) AS count FROM machine_readings').get();
+  res.json({ min: row.min ?? null, max: row.max ?? null, count: row.count ?? 0 });
 });
 
 // GET /api/machines/:number — full daily history for one machine (not date-range scoped)

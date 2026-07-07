@@ -23,7 +23,7 @@ export default function Dashboard() {
   if (error) return <div className="error-box">{error}</div>;
   if (!data) return <p className="muted"><span className="spinner" />Loading dashboard…</p>;
 
-  const { totals, previous, buckets, alerts, expenses, deadMachines, range, chartGranularity, latestDate } = data;
+  const { totals, previous, buckets, alerts, expenses, otherExpensesTotal, deadMachines, range, chartGranularity, latestDate } = data;
   const hasData = totals.sheet_count > 0;
   const chartNoun = chartGranularity === 'month' ? 'month' : chartGranularity === 'week' ? 'week' : 'day';
 
@@ -104,7 +104,7 @@ export default function Dashboard() {
         </div>
 
         <div className="panel">
-          <h2>Expenses — {range.label}</h2>
+          <h2>Expenses — {range.label} <span className="muted" style={{ fontWeight: 400, fontSize: 12 }}>(sheet + <Link to="/other-expenses">other</Link>)</span></h2>
           {expenses.length ? (
             <ResponsiveContainer width="100%" height={240}>
               <BarChart data={expenses} layout="vertical" margin={{ left: 20 }}>
@@ -117,7 +117,10 @@ export default function Dashboard() {
               </BarChart>
             </ResponsiveContainer>
           ) : <p className="muted">No expenses recorded in this range.</p>}
-          <p className="muted" style={{ fontSize: 12 }}>Match play: ${fmt(totals.match)}</p>
+          <p className="muted" style={{ fontSize: 12 }}>
+            Match play: ${fmt(totals.match)}
+            {otherExpensesTotal > 0 && <> · Other expenses: ${fmt(otherExpensesTotal)}</>}
+          </p>
         </div>
       </div>
 

@@ -185,3 +185,24 @@ input.cell { width: 90px; padding: 4px 6px; font-size: 12px; text-align: right; 
 .daterange-custom label { display: flex; flex-direction: column; gap: 4px; font-size: 12px; color: var(--muted); font-weight: 600; }
 .daterange-custom input { width: 100%; }
 .daterange-custom button { margin-top: 4px; }
+
+.row-action { padding: 5px 12px; font-size: 12px; box-shadow: none; }
+
+.sidebar-user { display: flex; flex-direction: column; }
+.sidebar-user-name { font-weight: 700; color: #fff; font-size: 13px; }
+.sidebar-user-email { font-size: 11px; color: #8fa3c8; margin-top: 2px; }
+.role-admin { color: #4da3ff; font-weight: 700; }
+
+.gate-screen {
+  min-height: 100vh; width: 100%; display: flex; align-items: center; justify-content: center;
+  background: var(--bg); padding: 24px;
+}
+.gate-card {
+  background: var(--panel); border-radius: var(--radius); box-shadow: var(--shadow);
+  padding: 36px 32px; max-width: 380px; width: 100%; text-align: center;
+  display: flex; flex-direction: column; gap: 14px;
+}
+.gate-icon { font-size: 40px; }
+.gate-card h2 { margin: 0; font-size: 18px; }
+.gate-label { display: flex; flex-direction: column; gap: 6px; font-size: 12px; color: var(--muted); font-weight: 600; text-align: left; }
+.gate-label input { width: 100%; }

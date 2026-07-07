@@ -19,7 +19,7 @@ const isProd = process.env.NODE_ENV === 'production';
 
 export const config = {
   isProd,
-  port: Number(process.env.PORT) || 3001,
+  port: Number(process.env.PORT) || 3003,
   dataDir: path.resolve(__dirname, '..', process.env.DATA_DIR || './data'),
   googleClientId: process.env.GOOGLE_CLIENT_ID || '',
   adminEmails: (process.env.ADMIN_EMAILS || '')
@@ -29,9 +29,13 @@ export const config = {
   jwtSecret: process.env.JWT_SECRET || '',
   anthropicApiKey: process.env.ANTHROPIC_API_KEY || '',
   claudeModel: process.env.CLAUDE_MODEL || 'claude-sonnet-5',
-  // Auth is scaffolded but OFF by default while testing locally.
-  // Set AUTH_ENABLED=true (plus GOOGLE_CLIENT_ID) to enforce Google sign-in + admin approval.
-  authEnabled: process.env.AUTH_ENABLED === 'true',
+  // Sign-in + admin approval is ON by default now.
+  // authProvider 'local' = lightweight name/email sign-in (no password, no external
+  // verification) — an interim stand-in so roles/approval work before Google OAuth
+  // is wired up for the Azure phase. Set AUTH_PROVIDER=google + GOOGLE_CLIENT_ID later
+  // to swap in real verified sign-in without touching any other code.
+  authEnabled: process.env.AUTH_ENABLED !== 'false',
+  authProvider: process.env.GOOGLE_CLIENT_ID ? 'google' : (process.env.AUTH_PROVIDER || 'local'),
 };
 
 if (!config.jwtSecret) {

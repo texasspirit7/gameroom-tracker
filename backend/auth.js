@@ -23,6 +23,25 @@ export async function verifyGoogleCredential(credential) {
   };
 }
 
+const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+
+/**
+ * Lightweight interim sign-in: trusts the client-submitted name/email with no
+ * password and no external verification. This is NOT secure — it exists so
+ * role/approval workflows can be exercised before real Google OAuth is wired
+ * up (set AUTH_PROVIDER=google + GOOGLE_CLIENT_ID to switch, no other changes needed).
+ */
+export function verifyLocalCredential({ name, email }) {
+  if (config.authProvider !== 'local') {
+    throw new Error('Local sign-in is disabled — Google sign-in is configured');
+  }
+  const cleanEmail = String(email || '').trim().toLowerCase();
+  const cleanName = String(name || '').trim();
+  if (!EMAIL_RE.test(cleanEmail)) throw new Error('Enter a valid email address');
+  if (!cleanName) throw new Error('Enter your name');
+  return { email: cleanEmail, name: cleanName, picture: null };
+}
+
 export function findOrCreateUser({ email, name, picture }) {
   const isAdmin = config.adminEmails.includes(email);
   const existing = db.prepare('SELECT * FROM users WHERE email = ?').get(email);
@@ -105,4 +124,10 @@ export function requireAdmin(req, res, next) {
     return res.status(403).json({ error: 'Admin access required' });
   }
   next();
+}
+
+/** Gate for delete/modify routes: enforces admin-only when auth is on, passes through when it's off. */
+export function adminGate(req, res, next) {
+  if (!config.authEnabled) return next();
+  return requireAdmin(req, res, next);
 }

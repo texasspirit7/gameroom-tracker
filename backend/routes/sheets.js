@@ -7,6 +7,7 @@ import { config } from '../config.js';
 import { extractFromXlsx } from '../extract/xlsxExtract.js';
 import { extractFromImage, mediaTypeForExt } from '../extract/claudeExtract.js';
 import { validateSheet, computeMeterProfit } from '../extract/validate.js';
+import { adminGate } from '../auth.js';
 
 const upload = multer({
   storage: multer.memoryStorage(),
@@ -134,8 +135,8 @@ sheetsRouter.get('/:id', (req, res) => {
   res.json({ ...sheet, warnings: JSON.parse(sheet.validation_json || '[]'), machines, expenses });
 });
 
-// PATCH /api/sheets/:id  — corrections from the Review screen
-sheetsRouter.patch('/:id', (req, res) => {
+// PATCH /api/sheets/:id  — corrections from the Review screen (admin-only once auth is on)
+sheetsRouter.patch('/:id', adminGate, (req, res) => {
   const id = Number(req.params.id);
   const sheet = db.prepare('SELECT * FROM sheets WHERE id = ?').get(id);
   if (!sheet) return res.status(404).json({ error: 'Sheet not found' });
@@ -197,15 +198,15 @@ sheetsRouter.patch('/:id', (req, res) => {
   res.json({ ok: true, meter_profit: meterProfit, over_short: overShort, warnings });
 });
 
-// POST /api/sheets/:id/verify
-sheetsRouter.post('/:id/verify', (req, res) => {
+// POST /api/sheets/:id/verify (admin-only once auth is on)
+sheetsRouter.post('/:id/verify', adminGate, (req, res) => {
   const result = db.prepare("UPDATE sheets SET status = 'verified' WHERE id = ?").run(Number(req.params.id));
   if (!result.changes) return res.status(404).json({ error: 'Sheet not found' });
   res.json({ ok: true });
 });
 
-// DELETE /api/sheets/:id
-sheetsRouter.delete('/:id', (req, res) => {
+// DELETE /api/sheets/:id (admin-only once auth is on)
+sheetsRouter.delete('/:id', adminGate, (req, res) => {
   const result = db.prepare('DELETE FROM sheets WHERE id = ?').run(Number(req.params.id));
   if (!result.changes) return res.status(404).json({ error: 'Sheet not found' });
   res.json({ ok: true });

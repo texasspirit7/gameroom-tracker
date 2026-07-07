@@ -18,6 +18,7 @@ export const api = {
   health: () => request('/api/health'),
   dashboard: (params = '') => request(`/api/dashboard${params}`),
   machines: (params = '') => request(`/api/machines${params}`),
+  machinesMeta: () => request('/api/machines/meta'),
   machine: (n) => request(`/api/machines/${n}`),
   sheets: () => request('/api/sheets'),
   sheet: (id) => request(`/api/sheets/${id}`),
@@ -30,6 +31,20 @@ export const api = {
   patchSheet: (id, body) => request(`/api/sheets/${id}`, { method: 'PATCH', body: JSON.stringify(body) }),
   verifySheet: (id) => request(`/api/sheets/${id}/verify`, { method: 'POST' }),
   deleteSheet: (id) => request(`/api/sheets/${id}`, { method: 'DELETE' }),
+
+  otherExpenses: (params = '') => request(`/api/other-expenses${params}`),
+  addOtherExpense: (body) => request('/api/other-expenses', { method: 'POST', body: JSON.stringify(body) }),
+  deleteOtherExpense: (id) => request(`/api/other-expenses/${id}`, { method: 'DELETE' }),
+
+  authConfig: () => request('/api/auth/config'),
+  me: () => request('/api/auth/me'),
+  loginLocal: (name, email) => request('/api/auth/local', { method: 'POST', body: JSON.stringify({ name, email }) }),
+  logout: () => request('/api/auth/logout', { method: 'POST' }),
+
+  adminUsers: () => request('/api/admin/users'),
+  approveUser: (id) => request(`/api/admin/users/${id}/approve`, { method: 'POST' }),
+  blockUser: (id) => request(`/api/admin/users/${id}/block`, { method: 'POST' }),
+  setUserRole: (id, role) => request(`/api/admin/users/${id}/role`, { method: 'POST', body: JSON.stringify({ role }) }),
 };
 
 export const fmt = (n, opts = {}) =>

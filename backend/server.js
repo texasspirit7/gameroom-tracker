@@ -4,9 +4,10 @@ import path from 'node:path';
 import fs from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import { config } from './config.js';
-import './db.js';
+import { db } from './db.js';
 import { sheetsRouter } from './routes/sheets.js';
 import { dashboardRouter, machinesRouter } from './routes/dashboard.js';
+import { otherExpensesRouter } from './routes/otherExpenses.js';
 import { authRouter, adminRouter } from './routes/auth.js';
 import { requireAuth, requireApproved } from './auth.js';
 
@@ -40,6 +41,7 @@ if (config.authEnabled) {
 app.use('/api/sheets', sheetsRouter);
 app.use('/api/dashboard', dashboardRouter);
 app.use('/api/machines', machinesRouter);
+app.use('/api/other-expenses', otherExpensesRouter);
 
 // Serve built frontend when it exists (production / local single-server mode)
 const dist = path.join(__dirname, '..', 'frontend', 'dist');
@@ -53,6 +55,21 @@ app.use((err, req, res, next) => {
   res.status(500).json({ error: 'Internal server error' });
 });
 
-app.listen(config.port, () => {
+const server = app.listen(config.port, () => {
   console.log(`Game Room Tracker running on http://localhost:${config.port}`);
 });
+
+// Ensure SQLite checkpoints the WAL into the main file and closes cleanly on shutdown
+function shutdown() {
+  server.close(() => {
+    try {
+      db.exec('PRAGMA wal_checkpoint(TRUNCATE)');
+      db.close();
+    } catch (err) {
+      console.error('[server] error closing database', err);
+    }
+    process.exit(0);
+  });
+}
+process.on('SIGINT', shutdown);
+process.on('SIGTERM', shutdown);

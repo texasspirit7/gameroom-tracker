@@ -1,10 +1,13 @@
 import { useEffect, useState } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
 import { api, fmt, signedMoney } from '../api.js';
+import { useAuth } from '../AuthContext.jsx';
 
 export default function SheetDetail() {
   const { id } = useParams();
   const navigate = useNavigate();
+  const { isAdmin, authEnabled } = useAuth();
+  const canModify = !authEnabled || isAdmin;
   const [sheet, setSheet] = useState(null);
   const [error, setError] = useState(null);
   const [saving, setSaving] = useState(false);
@@ -76,15 +79,20 @@ export default function SheetDetail() {
         </div>
       )}
       {saved && <div className="ok-box">Saved — totals and validations recomputed.</div>}
+      {!canModify && (
+        <div className="warning-box">Viewing only — editing, verifying, and deleting sheets requires an admin account.</div>
+      )}
 
-      <div className="toolbar">
-        <button onClick={save} disabled={!dirty || saving}>{saving ? 'Saving…' : 'Save changes'}</button>
-        {sheet.status !== 'verified' && (
-          <button className="secondary" onClick={verify} disabled={dirty}>Mark verified</button>
-        )}
-        <div className="spacer" />
-        <button className="danger" onClick={remove}>Delete sheet</button>
-      </div>
+      {canModify && (
+        <div className="toolbar">
+          <button onClick={save} disabled={!dirty || saving}>{saving ? 'Saving…' : 'Save changes'}</button>
+          {sheet.status !== 'verified' && (
+            <button className="secondary" onClick={verify} disabled={dirty}>Mark verified</button>
+          )}
+          <div className="spacer" />
+          <button className="danger" onClick={remove}>Delete sheet</button>
+        </div>
+      )}
 
       <div className="panel">
         <h2>Summary</h2>
@@ -97,7 +105,7 @@ export default function SheetDetail() {
             <label key={key}>
               {label}
               <input
-                type="number" style={{ width: 110 }} value={fieldValue(key)}
+                type="number" style={{ width: 110 }} value={fieldValue(key)} disabled={!canModify}
                 onChange={(e) => { setSaved(false); setFields((p) => ({ ...p, [key]: e.target.value })); }}
               />
             </label>
@@ -128,7 +136,7 @@ export default function SheetDetail() {
                   {['prev_in', 'curr_in', 'daily_in', 'prev_out', 'curr_out', 'daily_out'].map((key) => (
                     <td key={key}>
                       <input
-                        className="cell" type="number" value={rowValue(m, key)}
+                        className="cell" type="number" value={rowValue(m, key)} disabled={!canModify}
                         onChange={(e) => editCell(m.machine_number, key, e.target.value)}
                       />
                     </td>
