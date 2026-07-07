@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { api, fmt, signedMoney } from '../api.js';
-import { usePeriod } from '../PeriodContext.jsx';
+import { useDateRange } from '../DateRangeContext.jsx';
 
 const SORTS = {
   number: (a, b) => a.machine_number - b.machine_number,
@@ -11,7 +11,7 @@ const SORTS = {
 };
 
 export default function Machines() {
-  const { period } = usePeriod();
+  const { from, to, label, preset } = useDateRange();
   const [data, setData] = useState(null);
   const [error, setError] = useState(null);
   const [sort, setSort] = useState('number');
@@ -19,8 +19,11 @@ export default function Machines() {
 
   useEffect(() => {
     setData(null);
-    api.machines(`?granularity=${period}`).then(setData).catch((e) => setError(e.message));
-  }, [period]);
+    const params = preset === 'allTime'
+      ? ''
+      : `?from=${from}&to=${to}&label=${encodeURIComponent(label)}`;
+    api.machines(params).then(setData).catch((e) => setError(e.message));
+  }, [from, to, label, preset]);
 
   const sorted = useMemo(
     () => (data ? [...data.machines].sort(SORTS[sort]) : []),
@@ -39,7 +42,9 @@ export default function Machines() {
     <>
       <h1 className="page-title">Machines</h1>
       <div className="page-sub">
-        Per-machine performance for <strong>{data.scope.label}</strong> — click a row for the full history
+        Per-machine performance for <strong>{data.range.label}</strong>
+        {!data.range.allTime && <> ({data.range.from} → {data.range.to})</>}
+        {' '}— click a row for the full history
       </div>
 
       <div className="cards">
@@ -50,7 +55,7 @@ export default function Machines() {
 
       <div className="panel">
         <div className="toolbar">
-          <h2 style={{ margin: 0 }}>All machines — {data.scope.label}</h2>
+          <h2 style={{ margin: 0 }}>All machines — {data.range.label}</h2>
           <div className="spacer" />
           <select value={sort} onChange={(e) => setSort(e.target.value)}>
             <option value="number">Sort: machine #</option>
@@ -60,7 +65,7 @@ export default function Machines() {
           </select>
         </div>
         {rows.length === 0 ? (
-          <p className="muted">No readings in this period.</p>
+          <p className="muted">No readings in this range.</p>
         ) : (
           <table>
             <thead>

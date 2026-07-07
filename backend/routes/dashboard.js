@@ -4,10 +4,17 @@ import { db } from '../db.js';
 export const dashboardRouter = Router();
 export const machinesRouter = Router();
 
+const DATE_RE = /^\d{4}-\d{2}-\d{2}$/;
 const holdPct = (dIn, dOut) => (dIn > 0 ? Math.round(((dIn - dOut) / dIn) * 100) : null);
-const GRANULARITIES = new Set(['day', 'week', 'month', 'all']);
 
-/** Bucket key for a YYYY-MM-DD date at a granularity (week = Monday start date). */
+const addDays = (iso, delta) => {
+  const d = new Date(`${iso}T00:00:00Z`);
+  d.setUTCDate(d.getUTCDate() + delta);
+  return d.toISOString().slice(0, 10);
+};
+const daysBetween = (a, b) => Math.round((Date.parse(`${b}T00:00:00Z`) - Date.parse(`${a}T00:00:00Z`)) / 86400000) + 1;
+const chooseGranularity = (spanDays) => (spanDays <= 45 ? 'day' : spanDays <= 210 ? 'week' : 'month');
+
 function bucketKey(dateStr, g) {
   if (g === 'month') return dateStr.slice(0, 7);
   if (g === 'week') {
@@ -18,7 +25,6 @@ function bucketKey(dateStr, g) {
   return dateStr;
 }
 
-/** Inclusive from/to date range covered by a bucket. */
 function bucketRange(key, g) {
   if (g === 'month') {
     const [y, m] = key.split('-').map(Number);
@@ -26,9 +32,7 @@ function bucketRange(key, g) {
     return { from: `${key}-01`, to };
   }
   if (g === 'week') {
-    const d = new Date(`${key}T00:00:00Z`);
-    d.setUTCDate(d.getUTCDate() + 6);
-    return { from: key, to: d.toISOString().slice(0, 10) };
+    return { from: key, to: addDays(key, 6) };
   }
   return { from: key, to: key };
 }
@@ -38,16 +42,52 @@ const shortDate = (d) => `${MONTHS[Number(d.slice(5, 7)) - 1]} ${Number(d.slice(
 
 function bucketLabel(key, g) {
   if (g === 'month') return `${MONTHS[Number(key.slice(5, 7)) - 1]} ${key.slice(0, 4)}`;
-  if (g === 'week') {
-    const { to } = bucketRange(key, g);
-    return `${shortDate(key)}–${shortDate(to)}`;
-  }
-  return key;
+  if (g === 'week') return `${shortDate(key)}–${shortDate(bucketRange(key, g).to)}`;
+  return shortDate(key);
 }
 
-/** Alerts computed over an aggregated date range (a day, a week, or a month). */
-function alertsForRange(from, to, scopeLabel) {
+/** Parses & validates from/to query params. Returns { from, to, allTime, label }. */
+function resolveRange(req) {
+  const { from, to, label } = req.query;
+  if (from && to && DATE_RE.test(from) && DATE_RE.test(to) && from <= to) {
+    return { from, to, allTime: false, label: label ? String(label) : `${from} to ${to}` };
+  }
+  const bounds = db.prepare('SELECT MIN(sheet_date) AS min, MAX(sheet_date) AS max FROM sheets').get();
+  return {
+    from: bounds.min || '0001-01-01',
+    to: bounds.max || '9999-12-31',
+    allTime: true,
+    label: label ? String(label) : 'All Time',
+  };
+}
+
+function aggregate(from, to) {
+  const sheets = db.prepare(`
+    SELECT id, sheet_date, total_in, total_out, meter_profit, cash_profit, over_short
+    FROM sheets WHERE sheet_date BETWEEN ? AND ? ORDER BY sheet_date
+  `).all(from, to);
+
+  const totals = sheets.reduce(
+    (acc, s) => ({
+      total_in: acc.total_in + (s.total_in || 0),
+      total_out: acc.total_out + (s.total_out || 0),
+      meter_profit: acc.meter_profit + (s.meter_profit || 0),
+      cash_profit: s.cash_profit != null ? (acc.cash_profit || 0) + s.cash_profit : acc.cash_profit,
+      over_short: s.over_short != null ? (acc.over_short || 0) + s.over_short : acc.over_short,
+    }),
+    { total_in: 0, total_out: 0, meter_profit: 0, cash_profit: null, over_short: null }
+  );
+  totals.hold_pct = holdPct(totals.total_in, totals.total_out);
+  totals.sheet_count = sheets.length;
+  totals.match = db.prepare('SELECT COALESCE(SUM(match_amount),0) AS m FROM sheets WHERE sheet_date BETWEEN ? AND ?').get(from, to).m;
+
+  return { sheets, totals };
+}
+
+/** Alerts computed over an aggregated date range. */
+function alertsForRange(from, to, label) {
   const alerts = [];
+  const suffix = label ? ` — ${label}` : '';
 
   const agg = db.prepare(`
     SELECT mr.machine_number, SUM(mr.daily_in) AS in_sum, SUM(mr.daily_out) AS out_sum
@@ -61,17 +101,17 @@ function alertsForRange(from, to, scopeLabel) {
     if (r.out_sum >= 1000 && r.out_sum > r.in_sum * 2) {
       alerts.push({
         machine: r.machine_number, level: 'high',
-        message: `Machine ${r.machine_number} paid out $${r.out_sum.toLocaleString()} against $${r.in_sum.toLocaleString()} played ${scopeLabel}`,
+        message: `Machine ${r.machine_number} paid out $${r.out_sum.toLocaleString()} against $${r.in_sum.toLocaleString()} played${suffix}`,
       });
     } else if (r.in_sum === 0 && r.out_sum > 0) {
       alerts.push({
         machine: r.machine_number, level: 'high',
-        message: `Machine ${r.machine_number} paid out $${r.out_sum.toLocaleString()} with $0 played ${scopeLabel}`,
+        message: `Machine ${r.machine_number} paid out $${r.out_sum.toLocaleString()} with $0 played${suffix}`,
       });
     } else if (h != null && h < -100) {
       alerts.push({
         machine: r.machine_number, level: 'medium',
-        message: `Machine ${r.machine_number} hold is ${h}% ${scopeLabel} (in $${r.in_sum.toLocaleString()}, out $${r.out_sum.toLocaleString()})`,
+        message: `Machine ${r.machine_number} hold is ${h}%${suffix} (in $${r.in_sum.toLocaleString()}, out $${r.out_sum.toLocaleString()})`,
       });
     }
   }
@@ -80,26 +120,27 @@ function alertsForRange(from, to, scopeLabel) {
     'SELECT SUM(over_short) AS os FROM sheets WHERE sheet_date BETWEEN ? AND ? AND over_short IS NOT NULL'
   ).get(from, to).os;
   if (cash != null && cash <= -100) {
-    alerts.unshift({
-      machine: null, level: 'high',
-      message: `Cash short $${Math.abs(cash).toLocaleString()} ${scopeLabel}`,
-    });
+    alerts.unshift({ machine: null, level: 'high', message: `Cash short $${Math.abs(cash).toLocaleString()}${suffix}` });
   }
 
   return alerts;
 }
 
-// GET /api/dashboard?granularity=day|week|month|all
+// GET /api/dashboard?from=YYYY-MM-DD&to=YYYY-MM-DD&label=...
 dashboardRouter.get('/', (req, res) => {
-  const g = GRANULARITIES.has(req.query.granularity) ? req.query.granularity : 'all';
-  const chartGran = g === 'all' ? 'day' : g;
+  const range = resolveRange(req);
+  const { sheets, totals } = aggregate(range.from, range.to);
 
-  const sheets = db.prepare(`
-    SELECT id, sheet_date, total_in, total_out, meter_profit, cash_profit, over_short
-    FROM sheets ORDER BY sheet_date
-  `).all();
+  let previous = null;
+  if (!range.allTime) {
+    const span = daysBetween(range.from, range.to);
+    const prevTo = addDays(range.from, -1);
+    const prevFrom = addDays(prevTo, -(span - 1));
+    const prevAgg = aggregate(prevFrom, prevTo);
+    if (prevAgg.totals.sheet_count > 0) previous = prevAgg.totals;
+  }
 
-  // Group sheets into buckets at the chart granularity
+  const chartGran = chooseGranularity(daysBetween(range.from, range.to));
   const map = new Map();
   for (const s of sheets) {
     const key = bucketKey(s.sheet_date, chartGran);
@@ -120,93 +161,38 @@ dashboardRouter.get('/', (req, res) => {
   }
   const buckets = [...map.values()].map((b) => ({ ...b, hold_pct: holdPct(b.total_in, b.total_out) }));
 
-  const totals = sheets.reduce(
-    (acc, s) => ({
-      total_in: acc.total_in + (s.total_in || 0),
-      total_out: acc.total_out + (s.total_out || 0),
-      meter_profit: acc.meter_profit + (s.meter_profit || 0),
-      cash_profit: acc.cash_profit + (s.cash_profit || 0),
-      over_short: acc.over_short + (s.over_short || 0),
-    }),
-    { total_in: 0, total_out: 0, meter_profit: 0, cash_profit: 0, over_short: 0 }
-  );
-  totals.hold_pct = holdPct(totals.total_in, totals.total_out);
-  totals.match = db.prepare('SELECT COALESCE(SUM(match_amount),0) AS m FROM sheets').get().m;
+  const expenses = db.prepare(`
+    SELECT e.category, SUM(e.amount) AS amount
+    FROM expenses e JOIN sheets s ON s.id = e.sheet_id
+    WHERE s.sheet_date BETWEEN ? AND ?
+    GROUP BY e.category ORDER BY amount DESC
+  `).all(range.from, range.to);
 
-  const latestDate = sheets.length ? sheets[sheets.length - 1].sheet_date : null;
+  const deadMachines = db.prepare(`
+    SELECT machine_number FROM machine_readings mr JOIN sheets s ON s.id = mr.sheet_id
+    WHERE s.sheet_date BETWEEN ? AND ?
+    GROUP BY machine_number HAVING SUM(mr.daily_in) = 0
+    ORDER BY machine_number
+  `).all(range.from, range.to).map((r) => r.machine_number);
 
-  // Current period (latest bucket) + previous for comparison, and alert/expense scope
-  let current = null;
-  let previous = null;
-  let scope = null;
-  if (latestDate) {
-    if (g === 'all') {
-      scope = { from: '0000-01-01', to: '9999-12-31', label: 'all time' };
-    } else {
-      current = buckets[buckets.length - 1];
-      previous = buckets.length > 1 ? buckets[buckets.length - 2] : null;
-      const range = bucketRange(current.period, g);
-      const label = g === 'day' ? `on ${current.period}` : `during ${current.label}`;
-      scope = { ...range, label };
-    }
-  }
-
-  const alerts = scope ? alertsForRange(scope.from, scope.to, scope.label) : [];
-
-  const expenses = scope
-    ? db.prepare(`
-        SELECT e.category, SUM(e.amount) AS amount
-        FROM expenses e JOIN sheets s ON s.id = e.sheet_id
-        WHERE s.sheet_date BETWEEN ? AND ?
-        GROUP BY e.category ORDER BY amount DESC
-      `).all(scope.from, scope.to)
-    : [];
-
-  const scopedMatch = scope
-    ? db.prepare('SELECT COALESCE(SUM(match_amount),0) AS m FROM sheets WHERE sheet_date BETWEEN ? AND ?')
-        .get(scope.from, scope.to).m
-    : 0;
-
-  const deadMachines = scope
-    ? db.prepare(`
-        SELECT machine_number FROM machine_readings mr JOIN sheets s ON s.id = mr.sheet_id
-        WHERE s.sheet_date BETWEEN ? AND ?
-        GROUP BY machine_number HAVING SUM(mr.daily_in) = 0
-        ORDER BY machine_number
-      `).all(scope.from, scope.to).map((r) => r.machine_number)
-    : [];
+  const latestDate = db.prepare('SELECT MAX(sheet_date) AS d FROM sheets').get().d;
 
   res.json({
-    granularity: g,
-    buckets,
+    range: { from: range.from, to: range.to, label: range.label, allTime: range.allTime },
     totals,
-    current,
     previous,
-    scopeLabel: scope?.label ?? null,
-    alerts,
+    chartGranularity: chartGran,
+    buckets,
+    alerts: alertsForRange(range.from, range.to, range.label),
     expenses,
-    match: scopedMatch,
     deadMachines,
-    sheetCount: sheets.length,
     latestDate,
   });
 });
 
-// GET /api/machines?granularity=day|week|month|all — stats scoped to the latest period
+// GET /api/machines?from=YYYY-MM-DD&to=YYYY-MM-DD&label=...
 machinesRouter.get('/', (req, res) => {
-  const g = GRANULARITIES.has(req.query.granularity) ? req.query.granularity : 'all';
-
-  let from = '0000-01-01';
-  let to = '9999-12-31';
-  let label = 'all time';
-  if (g !== 'all') {
-    const latest = db.prepare('SELECT MAX(sheet_date) AS d FROM sheets').get().d;
-    if (latest) {
-      const key = bucketKey(latest, g);
-      ({ from, to } = bucketRange(key, g));
-      label = g === 'day' ? latest : bucketLabel(key, g);
-    }
-  }
+  const range = resolveRange(req);
 
   const rows = db.prepare(`
     SELECT mr.machine_number,
@@ -220,7 +206,7 @@ machinesRouter.get('/', (req, res) => {
     FROM machine_readings mr JOIN sheets s ON s.id = mr.sheet_id
     WHERE s.sheet_date BETWEEN ? AND ?
     GROUP BY mr.machine_number ORDER BY mr.machine_number
-  `).all(from, to);
+  `).all(range.from, range.to);
 
   const machines = rows.map((r) => {
     const net = (r.total_in || 0) - (r.total_out || 0);
@@ -233,10 +219,10 @@ machinesRouter.get('/', (req, res) => {
     return { ...r, net, hold_pct: hold, flag };
   });
 
-  res.json({ scope: { granularity: g, from, to, label }, machines });
+  res.json({ range: { from: range.from, to: range.to, label: range.label, allTime: range.allTime }, machines });
 });
 
-// GET /api/machines/:number — daily series for one machine (full history)
+// GET /api/machines/:number — full daily history for one machine (not date-range scoped)
 machinesRouter.get('/:number', (req, res) => {
   const n = Number(req.params.number);
   if (!Number.isInteger(n) || n < 1) return res.status(400).json({ error: 'Invalid machine number' });

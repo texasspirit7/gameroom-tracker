@@ -5,65 +5,54 @@ import {
   Tooltip, Legend, CartesianGrid, ReferenceLine, Cell,
 } from 'recharts';
 import { api, fmt, signedMoney } from '../api.js';
-import { usePeriod } from '../PeriodContext.jsx';
-
-const PERIOD_NOUN = { day: 'day', week: 'week', month: 'month' };
+import { useDateRange } from '../DateRangeContext.jsx';
 
 export default function Dashboard() {
-  const { period } = usePeriod();
+  const { from, to, label, preset } = useDateRange();
   const [data, setData] = useState(null);
   const [error, setError] = useState(null);
 
   useEffect(() => {
     setData(null);
-    api.dashboard(`?granularity=${period}`).then(setData).catch((e) => setError(e.message));
-  }, [period]);
+    const params = preset === 'allTime'
+      ? ''
+      : `?from=${from}&to=${to}&label=${encodeURIComponent(label)}`;
+    api.dashboard(params).then(setData).catch((e) => setError(e.message));
+  }, [from, to, label, preset]);
 
   if (error) return <div className="error-box">{error}</div>;
   if (!data) return <p className="muted"><span className="spinner" />Loading dashboard…</p>;
 
-  const {
-    totals, buckets, current, previous, scopeLabel,
-    expenses, match, alerts, deadMachines, sheetCount, latestDate, granularity,
-  } = data;
-  const hasData = sheetCount > 0;
-  const isAll = granularity === 'all';
+  const { totals, previous, buckets, alerts, expenses, deadMachines, range, chartGranularity, latestDate } = data;
+  const hasData = totals.sheet_count > 0;
+  const chartNoun = chartGranularity === 'month' ? 'month' : chartGranularity === 'week' ? 'week' : 'day';
 
-  // Cards show the latest period (or all-time totals in "All time" view)
-  const cards = isAll ? totals : current || {};
-  const cardScope = isAll
-    ? 'All time'
-    : current
-      ? granularity === 'day' ? current.period : current.label
-      : 'No data';
-  const noun = PERIOD_NOUN[granularity];
-
-  const delta = (key) =>
-    !isAll && previous && cards[key] != null && previous[key] != null
-      ? cards[key] - previous[key]
-      : null;
+  const delta = (key) => (previous && totals[key] != null && previous[key] != null ? totals[key] - previous[key] : null);
 
   return (
     <>
       <h1 className="page-title">Dashboard</h1>
       <div className="page-sub">
-        {hasData
-          ? <>Showing <strong>{cardScope}</strong> · {sheetCount} sheet{sheetCount === 1 ? '' : 's'} on record · latest {latestDate}</>
-          : 'No sheets yet — upload your first daily sheet'}
+        Showing <strong>{range.label}</strong>
+        {!range.allTime && <> ({range.from} → {range.to})</>}
+        {' · '}{totals.sheet_count} sheet{totals.sheet_count === 1 ? '' : 's'} in range
+        {latestDate && <> · latest upload {latestDate}</>}
       </div>
 
       <div className="cards">
-        <Card label="Total In" value={`$${fmt(cards.total_in)}`} delta={delta('total_in')} noun={noun} />
-        <Card label="Total Out" value={`$${fmt(cards.total_out)}`} delta={delta('total_out')} noun={noun} invert />
-        <Card label="Meter Profit" value={signedMoney(cards.meter_profit)} tone={cards.meter_profit >= 0 ? 'good' : 'bad'} delta={delta('meter_profit')} noun={noun} />
-        <Card label="Cash Profit" value={signedMoney(cards.cash_profit)} tone={cards.cash_profit == null ? '' : cards.cash_profit >= 0 ? 'good' : 'bad'} delta={delta('cash_profit')} noun={noun} />
-        <Card label="Over / Short" value={signedMoney(cards.over_short)} tone={cards.over_short == null ? '' : cards.over_short >= 0 ? 'good' : 'bad'} delta={delta('over_short')} noun={noun} />
-        <Card label="Hold %" value={cards.hold_pct != null ? `${cards.hold_pct}%` : '—'} />
+        <Card label="Total In" value={`$${fmt(totals.total_in)}`} delta={delta('total_in')} />
+        <Card label="Total Out" value={`$${fmt(totals.total_out)}`} delta={delta('total_out')} invert />
+        <Card label="Meter Profit" value={signedMoney(totals.meter_profit)} tone={totals.meter_profit >= 0 ? 'good' : 'bad'} delta={delta('meter_profit')} />
+        <Card label="Cash Profit" value={signedMoney(totals.cash_profit)} tone={totals.cash_profit == null ? '' : totals.cash_profit >= 0 ? 'good' : 'bad'} delta={delta('cash_profit')} />
+        <Card label="Over / Short" value={signedMoney(totals.over_short)} tone={totals.over_short == null ? '' : totals.over_short >= 0 ? 'good' : 'bad'} delta={delta('over_short')} />
+        <Card label="Hold %" value={totals.hold_pct != null ? `${totals.hold_pct}%` : '—'} />
       </div>
 
       <div className="panel">
-        <h2>Alerts — {scopeLabel || 'no data'}</h2>
-        {alerts.length ? (
+        <h2>Alerts — {range.label}</h2>
+        {!hasData ? (
+          <p className="muted" style={{ margin: 0 }}>No sheets uploaded for {range.label}.</p>
+        ) : alerts.length ? (
           <div className="alert-list">
             {alerts.map((a, i) => (
               <div key={i} className={`alert-item ${a.level}`}>
@@ -73,12 +62,12 @@ export default function Dashboard() {
             ))}
           </div>
         ) : (
-          <p className="muted" style={{ margin: 0 }}>No alerts {scopeLabel} — all clear ✅</p>
+          <p className="muted" style={{ margin: 0 }}>No alerts — all clear ✅</p>
         )}
       </div>
 
       <div className="panel">
-        <h2>Profit trend {isAll ? 'by day' : `by ${noun}`}</h2>
+        <h2>Profit trend by {chartNoun}</h2>
         {hasData ? (
           <ResponsiveContainer width="100%" height={280}>
             <LineChart data={buckets} margin={{ top: 6, right: 16, left: 0, bottom: 0 }}>
@@ -93,12 +82,12 @@ export default function Dashboard() {
               <Line type="monotone" dataKey="over_short" name="Over/Short" stroke="#c22f2f" strokeDasharray="5 4" dot={{ r: 3 }} connectNulls />
             </LineChart>
           </ResponsiveContainer>
-        ) : <p className="muted">Upload sheets to see the trend.</p>}
+        ) : <p className="muted">No data in this range.</p>}
       </div>
 
       <div className="grid-2">
         <div className="panel">
-          <h2>In vs out {isAll ? 'by day' : `by ${noun}`}</h2>
+          <h2>In vs out by {chartNoun}</h2>
           {hasData ? (
             <ResponsiveContainer width="100%" height={240}>
               <BarChart data={buckets}>
@@ -115,7 +104,7 @@ export default function Dashboard() {
         </div>
 
         <div className="panel">
-          <h2>Expenses — {scopeLabel || 'no data'}</h2>
+          <h2>Expenses — {range.label}</h2>
           {expenses.length ? (
             <ResponsiveContainer width="100%" height={240}>
               <BarChart data={expenses} layout="vertical" margin={{ left: 20 }}>
@@ -127,14 +116,14 @@ export default function Dashboard() {
                 </Bar>
               </BarChart>
             </ResponsiveContainer>
-          ) : <p className="muted">No expenses recorded {scopeLabel}.</p>}
-          <p className="muted" style={{ fontSize: 12 }}>Match play {scopeLabel}: ${fmt(match)}</p>
+          ) : <p className="muted">No expenses recorded in this range.</p>}
+          <p className="muted" style={{ fontSize: 12 }}>Match play: ${fmt(totals.match)}</p>
         </div>
       </div>
 
       {deadMachines.length > 0 && (
         <div className="panel">
-          <h2>Machines with no play — {scopeLabel}</h2>
+          <h2>Machines with no play — {range.label}</h2>
           <p style={{ fontSize: 13 }}>
             {deadMachines.map((n) => (
               <Link key={n} to={`/machines/${n}`} style={{ marginRight: 10 }}>#{n}</Link>
@@ -146,13 +135,13 @@ export default function Dashboard() {
   );
 }
 
-function Card({ label, value, tone, delta, noun, invert }) {
+function Card({ label, value, tone, delta, invert }) {
   let deltaEl = null;
-  if (delta != null && noun) {
+  if (delta != null) {
     const good = invert ? delta < 0 : delta >= 0;
     deltaEl = (
       <div className={`card-delta ${good ? 'pos' : 'neg'}`}>
-        {delta >= 0 ? '▲' : '▼'} {signedMoney(Math.abs(delta))} vs prev {noun}
+        {delta >= 0 ? '▲' : '▼'} {signedMoney(Math.abs(delta))} vs previous period
       </div>
     );
   }

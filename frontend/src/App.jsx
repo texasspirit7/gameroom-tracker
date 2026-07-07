@@ -1,5 +1,6 @@
 import { NavLink, Route, Routes, useLocation } from 'react-router-dom';
-import { PeriodProvider, usePeriod, PERIODS } from './PeriodContext.jsx';
+import { DateRangeProvider } from './DateRangeContext.jsx';
+import DateRangePicker from './components/DateRangePicker.jsx';
 import Dashboard from './pages/Dashboard.jsx';
 import Upload from './pages/Upload.jsx';
 import Sheets from './pages/Sheets.jsx';
@@ -14,34 +15,22 @@ const NAV = [
   { to: '/machines', label: 'Machines', icon: '🎰' },
 ];
 
-// The period switch only changes data on these routes
-const PERIOD_ROUTES = ['/', '/machines'];
+// The date range picker only affects data on these routes
+const DATE_RANGE_ROUTES = ['/', '/machines'];
 
-function PeriodSwitch() {
-  const { period, setPeriod } = usePeriod();
+function Topbar() {
   const { pathname } = useLocation();
-  const relevant = PERIOD_ROUTES.includes(pathname);
-  if (!relevant) return null;
+  if (!DATE_RANGE_ROUTES.includes(pathname)) return <div className="topbar" />;
   return (
-    <div className="segmented" role="tablist" aria-label="View period">
-      {PERIODS.map(([key, label]) => (
-        <button
-          key={key}
-          role="tab"
-          aria-selected={period === key}
-          className={period === key ? 'seg-active' : ''}
-          onClick={() => setPeriod(key)}
-        >
-          {label}
-        </button>
-      ))}
+    <div className="topbar">
+      <DateRangePicker />
     </div>
   );
 }
 
 export default function App() {
   return (
-    <PeriodProvider>
+    <DateRangeProvider>
       <div className="layout">
         <aside className="sidebar">
           <div className="brand">
@@ -62,9 +51,7 @@ export default function App() {
           <div className="sidebar-foot">Auth off — local testing</div>
         </aside>
         <main className="content">
-          <div className="topbar">
-            <PeriodSwitch />
-          </div>
+          <Topbar />
           <Routes>
             <Route path="/" element={<Dashboard />} />
             <Route path="/upload" element={<Upload />} />
@@ -75,6 +62,6 @@ export default function App() {
           </Routes>
         </main>
       </div>
-    </PeriodProvider>
+    </DateRangeProvider>
   );
 }

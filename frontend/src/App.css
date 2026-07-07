@@ -152,3 +152,36 @@ input.cell { width: 90px; padding: 4px 6px; font-size: 12px; text-align: right; 
   box-shadow: 0 1px 3px rgba(20, 30, 60, 0.15);
 }
 .card-delta { font-size: 11px; margin-top: 6px; font-weight: 600; }
+
+.daterange { position: relative; }
+.daterange-trigger {
+  background: #fff; color: var(--ink); box-shadow: var(--shadow);
+  border: 1px solid var(--line); display: inline-flex; align-items: center; gap: 8px;
+  padding: 9px 14px; font-size: 13px; font-weight: 600; border-radius: 10px;
+}
+.daterange-trigger:hover { filter: none; border-color: #c7d2e6; }
+.daterange-icon { font-size: 14px; }
+.daterange-sub { color: var(--muted); font-weight: 500; font-size: 12px; }
+.daterange-caret { color: var(--muted); font-size: 10px; margin-left: 2px; }
+
+.daterange-panel {
+  position: absolute; top: calc(100% + 8px); right: 0; z-index: 20;
+  background: #fff; border-radius: 12px; box-shadow: var(--shadow); border: 1px solid var(--line);
+  display: flex; min-width: 460px; overflow: hidden;
+}
+.daterange-presets {
+  display: flex; flex-direction: column; padding: 8px; gap: 2px;
+  border-right: 1px solid var(--line); min-width: 160px;
+}
+.daterange-presets button {
+  background: transparent; color: var(--ink); box-shadow: none; text-align: left;
+  padding: 8px 12px; border-radius: 8px; font-size: 13px; font-weight: 500;
+}
+.daterange-presets button:hover { background: #f2f5fa; filter: none; }
+.daterange-presets button.seg-active { background: #e8f1fc; color: var(--accent-2); font-weight: 700; }
+
+.daterange-custom { padding: 16px; display: flex; flex-direction: column; gap: 10px; flex: 1; }
+.daterange-custom-title { font-size: 12px; font-weight: 700; color: var(--muted); text-transform: uppercase; letter-spacing: 0.04em; margin-bottom: 4px; }
+.daterange-custom label { display: flex; flex-direction: column; gap: 4px; font-size: 12px; color: var(--muted); font-weight: 600; }
+.daterange-custom input { width: 100%; }
+.daterange-custom button { margin-top: 4px; }
