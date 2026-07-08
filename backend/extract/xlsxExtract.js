@@ -119,6 +119,5 @@ export function extractFromXlsx(buffer) {
       end_bank: labelValue('new bank'),
     },
     expenses,
-    sheet_date: null,
   };
 }

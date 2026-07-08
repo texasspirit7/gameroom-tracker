@@ -22,10 +22,9 @@ export const api = {
   machine: (n) => request(`/api/machines/${n}`),
   sheets: () => request('/api/sheets'),
   sheet: (id) => request(`/api/sheets/${id}`),
-  uploadSheet: (file, sheetDate) => {
+  uploadSheet: (file) => {
     const form = new FormData();
     form.append('file', file);
-    if (sheetDate) form.append('sheet_date', sheetDate);
     return request('/api/sheets/upload', { method: 'POST', body: form });
   },
   patchSheet: (id, body) => request(`/api/sheets/${id}`, { method: 'PATCH', body: JSON.stringify(body) }),

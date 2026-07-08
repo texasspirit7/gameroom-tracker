@@ -18,6 +18,13 @@ export const sheetsRouter = Router();
 
 const DATE_RE = /^\d{4}-\d{2}-\d{2}$/;
 
+/** Server-local today, YYYY-MM-DD — sheets are always dated by upload day, not a date parsed from the file. */
+function todayISO() {
+  const d = new Date();
+  const pad = (n) => String(n).padStart(2, '0');
+  return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`;
+}
+
 function saveUploadedFile(file, sheetDate) {
   const ext = path.extname(file.originalname).toLowerCase() || '.bin';
   const name = `${sheetDate || 'undated'}-${Date.now()}${ext}`;
@@ -74,7 +81,7 @@ function persistSheet({ extracted, sheetDate, source, filePath, warnings }) {
   return sheetId;
 }
 
-// POST /api/sheets/upload  (multipart: file, sheet_date?)
+// POST /api/sheets/upload  (multipart: file) — always dated by today, the upload day
 sheetsRouter.post('/upload', upload.single('file'), async (req, res) => {
   try {
     if (!req.file) return res.status(400).json({ error: 'No file uploaded' });
@@ -90,13 +97,8 @@ sheetsRouter.post('/upload', upload.single('file'), async (req, res) => {
       ? extractFromXlsx(req.file.buffer)
       : await extractFromImage(req.file.buffer, mediaType);
 
-    let sheetDate = req.body.sheet_date || extracted.sheet_date;
-    if (!sheetDate || !DATE_RE.test(sheetDate)) {
-      return res.status(400).json({
-        error: 'Sheet date not found in the file — pick the date and re-upload',
-        needsDate: true,
-      });
-    }
+    // Sheets are always dated by the day they're uploaded — no date is read from the file.
+    const sheetDate = todayISO();
 
     const { warnings } = validateSheet({ sheetDate, machines: extracted.machines, totals: extracted.totals });
 

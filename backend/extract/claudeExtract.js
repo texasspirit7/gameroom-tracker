@@ -8,10 +8,6 @@ const SHEET_TOOL = {
     type: 'object',
     required: ['machines', 'totals'],
     properties: {
-      sheet_date: {
-        type: 'string',
-        description: 'Sheet date as YYYY-MM-DD if visible anywhere in the image, else empty string',
-      },
       machines: {
         type: 'array',
         description: 'One entry per machine row (1..40). Skip nothing — include zero rows too.',
@@ -98,7 +94,7 @@ export async function extractFromImage(buffer, mediaType) {
           {
             type: 'text',
             text: [
-              'This is a daily game room reconciliation sheet with a 40-machine meter table',
+              'This is a daily game room reconciliation sheet with a machine meter table',
               '(#, Previous In, Current In, Daily In, Previous Out, Current Out, Daily Out, Hold),',
               'a settlement box (Total Out, Match, Pay names, expense rows, Total In, Loan RTN)',
               'and a Bank box (Opening, Profit (Loss), Short/Over, New Bank).',
@@ -126,6 +122,5 @@ export async function extractFromImage(buffer, mediaType) {
     },
     expenses: data.expenses || [],
     bank: data.bank || {},
-    sheet_date: data.sheet_date || null,
   };
 }

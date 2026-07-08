@@ -4,10 +4,8 @@ import { api } from '../api.js';
 
 export default function Upload() {
   const [file, setFile] = useState(null);
-  const [sheetDate, setSheetDate] = useState('');
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState(null);
-  const [needsDate, setNeedsDate] = useState(false);
   const [drag, setDrag] = useState(false);
   const inputRef = useRef(null);
   const navigate = useNavigate();
@@ -15,7 +13,6 @@ export default function Upload() {
   const pick = (f) => {
     setFile(f || null);
     setError(null);
-    setNeedsDate(false);
   };
 
   const submit = async () => {
@@ -23,11 +20,10 @@ export default function Upload() {
     setBusy(true);
     setError(null);
     try {
-      const result = await api.uploadSheet(file, sheetDate || undefined);
+      const result = await api.uploadSheet(file);
       navigate(`/sheets/${result.sheetId}`);
     } catch (e) {
       setError(e.message);
-      if (e.data?.needsDate) setNeedsDate(true);
     } finally {
       setBusy(false);
     }
@@ -38,7 +34,8 @@ export default function Upload() {
       <h1 className="page-title">Upload Daily Sheet</h1>
       <div className="page-sub">
         Excel (.xlsx) is read directly. Photos (.jpg/.png) are read with AI — always review before verifying.
-        Uploading more than one sheet for the same date is fine (e.g. separate shifts) — both are kept.
+        The sheet is dated today automatically. Uploading more than one sheet on the same day is fine
+        (e.g. separate shifts) — both are kept.
       </div>
 
       <div className="panel">
@@ -59,10 +56,6 @@ export default function Upload() {
         </div>
 
         <div className="form-row" style={{ marginTop: 16 }}>
-          <label>
-            Sheet date {needsDate ? '(required — not found in file)' : '(optional — auto-detected when possible)'}
-            <input type="date" value={sheetDate} onChange={(e) => setSheetDate(e.target.value)} />
-          </label>
           <button onClick={submit} disabled={!file || busy}>
             {busy ? <><span className="spinner" />Extracting…</> : 'Upload & Extract'}
           </button>
