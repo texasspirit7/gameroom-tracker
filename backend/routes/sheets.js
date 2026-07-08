@@ -98,12 +98,17 @@ sheetsRouter.post('/upload', upload.single('file'), async (req, res) => {
       });
     }
 
-    const existing = db.prepare('SELECT id FROM sheets WHERE sheet_date = ?').get(sheetDate);
-    if (existing) {
-      return res.status(409).json({ error: `A sheet for ${sheetDate} already exists (sheet #${existing.id}). Delete it first to re-upload.` });
+    const { warnings } = validateSheet({ sheetDate, machines: extracted.machines, totals: extracted.totals });
+
+    // Multiple sheets per date are allowed (e.g. separate shifts) — just flag it,
+    // don't block the upload.
+    const existing = db.prepare('SELECT id FROM sheets WHERE sheet_date = ? ORDER BY id').all(sheetDate);
+    if (existing.length) {
+      warnings.push(
+        `${existing.length} other sheet${existing.length === 1 ? '' : 's'} already exist${existing.length === 1 ? 's' : ''} for ${sheetDate} (#${existing.map((s) => s.id).join(', #')})`
+      );
     }
 
-    const { warnings } = validateSheet({ sheetDate, machines: extracted.machines, totals: extracted.totals });
     const filePath = saveUploadedFile(req.file, sheetDate);
     const sheetId = persistSheet({
       extracted, sheetDate, source: isXlsx ? 'xlsx' : 'image', filePath, warnings,
@@ -121,7 +126,7 @@ sheetsRouter.get('/', (req, res) => {
   const sheets = db.prepare(`
     SELECT id, sheet_date, source, total_in, total_out, meter_profit, cash_profit,
            over_short, status, validation_json, created_at
-    FROM sheets ORDER BY sheet_date DESC
+    FROM sheets ORDER BY sheet_date DESC, id DESC
   `).all();
   res.json(sheets.map((s) => ({ ...s, warnings: JSON.parse(s.validation_json || '[]').length })));
 });

@@ -11,6 +11,7 @@
   --warn: #b97c10;
   --radius: 12px;
   --shadow: 0 1px 3px rgba(20, 30, 60, 0.08), 0 4px 14px rgba(20, 30, 60, 0.06);
+  --lights-height: 22px;
 }
 
 * { box-sizing: border-box; }
@@ -21,7 +22,7 @@ body {
   color: var(--ink);
 }
 
-.layout { display: flex; min-height: 100vh; }
+.layout { display: flex; min-height: calc(100vh - var(--lights-height)); }
 
 .sidebar {
   width: 220px;
@@ -31,8 +32,8 @@ body {
   display: flex;
   flex-direction: column;
   position: sticky;
-  top: 0;
-  height: 100vh;
+  top: var(--lights-height);
+  height: calc(100vh - var(--lights-height));
 }
 .brand { display: flex; gap: 10px; align-items: center; padding: 20px 18px; border-bottom: 1px solid rgba(255,255,255,0.08); }
 .brand-icon { font-size: 26px; }
@@ -50,7 +51,8 @@ body {
 .nav-icon { font-size: 16px; }
 .sidebar-foot { padding: 14px 18px; font-size: 11px; color: #6d80a5; border-top: 1px solid rgba(255,255,255,0.08); }
 
-.content { flex: 1; padding: 28px 32px; max-width: 1200px; }
+.content { flex: 1; padding: 28px 32px; max-width: 1200px; position: relative; }
+.content > * { position: relative; z-index: 1; }
 .page-title { margin: 0 0 4px; font-size: 22px; }
 .page-sub { color: var(--muted); font-size: 13px; margin-bottom: 22px; }
 
@@ -195,7 +197,7 @@ input.cell { width: 90px; padding: 4px 6px; font-size: 12px; text-align: right; 
 .role-admin { color: #4da3ff; font-weight: 700; }
 
 .gate-screen {
-  min-height: 100vh; width: 100%; display: flex; align-items: center; justify-content: center;
+  min-height: calc(100vh - var(--lights-height)); width: 100%; display: flex; align-items: center; justify-content: center;
   background: var(--bg); padding: 24px;
 }
 .gate-card {
@@ -207,3 +209,51 @@ input.cell { width: 90px; padding: 4px 6px; font-size: 12px; text-align: right; 
 .gate-card h2 { margin: 0; font-size: 18px; }
 .gate-label { display: flex; flex-direction: column; gap: 6px; font-size: 12px; color: var(--muted); font-weight: 600; text-align: left; }
 .gate-label input { width: 100%; }
+
+/* Casino marquee string lights across the very top of the app */
+.string-lights {
+  position: sticky;
+  top: 0;
+  z-index: 40;
+  height: var(--lights-height);
+  display: flex;
+  align-items: flex-end;
+  justify-content: space-between;
+  gap: 2px;
+  padding: 0 10px 4px;
+  background: linear-gradient(180deg, #0a1526, #0b1830);
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.35);
+}
+.light-bulb {
+  flex: 1;
+  min-width: 4px;
+  max-width: 10px;
+  height: 8px;
+  border-radius: 50%;
+  background: var(--bulb-color);
+  box-shadow: 0 0 5px 2px var(--bulb-color), 0 0 10px 4px color-mix(in srgb, var(--bulb-color) 60%, transparent);
+  animation: twinkle 1.8s ease-in-out infinite;
+}
+@keyframes twinkle {
+  0%, 100% { opacity: 1; transform: scale(1); }
+  50% { opacity: 0.4; transform: scale(0.8); }
+}
+@media (prefers-reduced-motion: reduce) {
+  .light-bulb { animation: none; }
+}
+
+/* Faint casino iconography scattered behind page content */
+.casino-backdrop {
+  position: absolute;
+  inset: 0;
+  z-index: 0;
+  overflow: hidden;
+  pointer-events: none;
+}
+.backdrop-icon {
+  position: absolute;
+  opacity: 0.05;
+  filter: grayscale(0.15);
+  line-height: 1;
+  user-select: none;
+}

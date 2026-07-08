@@ -35,15 +35,14 @@ export function validateSheet({ sheetDate, machines, totals, excludeSheetId }) {
     }
   }
 
-  // Meter continuity vs the most recent earlier sheet
+  // Meter continuity vs the most recently uploaded sheet before this one.
+  // Uses upload order (id), not sheet_date — meters are a running physical
+  // count, so "previous" means the last reading taken, which matters even
+  // when two sheets share a date (e.g. separate shifts).
   if (sheetDate) {
-    const prevSheet = db
-      .prepare(
-        `SELECT id, sheet_date FROM sheets
-         WHERE sheet_date < ? AND id != COALESCE(?, -1)
-         ORDER BY sheet_date DESC LIMIT 1`
-      )
-      .get(sheetDate, excludeSheetId ?? null);
+    const prevSheet = excludeSheetId
+      ? db.prepare('SELECT id, sheet_date FROM sheets WHERE id < ? ORDER BY id DESC LIMIT 1').get(excludeSheetId)
+      : db.prepare('SELECT id, sheet_date FROM sheets ORDER BY id DESC LIMIT 1').get();
     if (prevSheet) {
       const prevReadings = db
         .prepare('SELECT machine_number, curr_in, curr_out FROM machine_readings WHERE sheet_id = ?')

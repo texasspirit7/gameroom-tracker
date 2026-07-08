@@ -3,6 +3,8 @@ import { DateRangeProvider } from './DateRangeContext.jsx';
 import { AuthProvider, useAuth } from './AuthContext.jsx';
 import DateRangePicker from './components/DateRangePicker.jsx';
 import LoginGate from './components/LoginGate.jsx';
+import StringLights from './components/StringLights.jsx';
+import CasinoBackdrop from './components/CasinoBackdrop.jsx';
 import Dashboard from './pages/Dashboard.jsx';
 import Upload from './pages/Upload.jsx';
 import Sheets from './pages/Sheets.jsx';
@@ -69,6 +71,7 @@ function AppShell() {
         <SidebarFooter />
       </aside>
       <main className="content">
+        <CasinoBackdrop />
         <Topbar />
         <Routes>
           <Route path="/" element={<Dashboard />} />
@@ -89,6 +92,7 @@ export default function App() {
   return (
     <AuthProvider>
       <DateRangeProvider>
+        <StringLights />
         <LoginGate>
           <AppShell />
         </LoginGate>

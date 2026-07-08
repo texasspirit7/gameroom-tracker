@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { Link, useParams } from 'react-router-dom';
 import {
   ResponsiveContainer, ComposedChart, Bar, Line, XAxis, YAxis,
@@ -21,10 +21,22 @@ export default function MachineDetail() {
     api.machinesMeta().then(setMeta).catch(() => {});
   }, []);
 
+  // When multiple sheets share a date (e.g. separate shifts), label them
+  // distinctly so the chart/table don't show ambiguous duplicate dates.
+  const series = useMemo(() => {
+    if (!data) return [];
+    const dateCounts = new Map();
+    for (const r of data.series) dateCounts.set(r.sheet_date, (dateCounts.get(r.sheet_date) || 0) + 1);
+    return data.series.map((r) => ({
+      ...r,
+      label: dateCounts.get(r.sheet_date) > 1 ? `${r.sheet_date} (#${r.sheet_id})` : r.sheet_date,
+    }));
+  }, [data]);
+
   if (error) return <div className="error-box">{error}</div>;
   if (!data) return <p className="muted"><span className="spinner" />Loading…</p>;
 
-  const { summary, series } = data;
+  const { summary } = data;
   const n = Number(number);
   const min = meta?.min ?? 1;
   const max = meta?.max ?? n;
@@ -38,7 +50,7 @@ export default function MachineDetail() {
         {n > min && <Link className="btn secondary" to={`/machines/${n - 1}`}>← #{n - 1}</Link>}
         {n < max && <Link className="btn" to={`/machines/${n + 1}`}>#{n + 1} →</Link>}
       </div>
-      <div className="page-sub">{summary.days} day{summary.days === 1 ? '' : 's'} on record · active {summary.active_days}</div>
+      <div className="page-sub">{summary.days} sheet{summary.days === 1 ? '' : 's'} on record · active {summary.active_days}</div>
 
       <div className="cards">
         <div className="card"><div className="label">Total In</div><div className="value">${fmt(summary.total_in)}</div></div>
@@ -58,7 +70,7 @@ export default function MachineDetail() {
           <ResponsiveContainer width="100%" height={300}>
             <ComposedChart data={series}>
               <CartesianGrid strokeDasharray="3 3" stroke="#e4e8f0" />
-              <XAxis dataKey="sheet_date" fontSize={12} />
+              <XAxis dataKey="label" fontSize={12} />
               <YAxis fontSize={12} />
               <Tooltip formatter={(v) => `$${fmt(v)}`} />
               <Legend />
@@ -76,14 +88,14 @@ export default function MachineDetail() {
         <table>
           <thead>
             <tr>
-              <th>Date</th><th>Prev In</th><th>Curr In</th><th>Daily In</th>
+              <th>Sheet</th><th>Prev In</th><th>Curr In</th><th>Daily In</th>
               <th>Prev Out</th><th>Curr Out</th><th>Daily Out</th><th>Net</th><th>Hold %</th>
             </tr>
           </thead>
           <tbody>
             {series.slice().reverse().map((r) => (
-              <tr key={r.sheet_date}>
-                <td>{r.sheet_date}</td>
+              <tr key={r.sheet_id}>
+                <td><Link to={`/sheets/${r.sheet_id}`}>{r.label}</Link></td>
                 <td>{fmt(r.prev_in)}</td>
                 <td>{fmt(r.curr_in)}</td>
                 <td>${fmt(r.daily_in)}</td>

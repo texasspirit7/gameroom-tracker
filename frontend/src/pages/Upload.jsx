@@ -36,7 +36,10 @@ export default function Upload() {
   return (
     <>
       <h1 className="page-title">Upload Daily Sheet</h1>
-      <div className="page-sub">Excel (.xlsx) is read directly. Photos (.jpg/.png) are read with AI — always review before verifying.</div>
+      <div className="page-sub">
+        Excel (.xlsx) is read directly. Photos (.jpg/.png) are read with AI — always review before verifying.
+        Uploading more than one sheet for the same date is fine (e.g. separate shifts) — both are kept.
+      </div>
 
       <div className="panel">
         <div

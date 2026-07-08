@@ -67,7 +67,7 @@ function resolveRange(req) {
 function aggregate(from, to) {
   const sheets = db.prepare(`
     SELECT id, sheet_date, total_in, total_out, meter_profit, cash_profit, over_short
-    FROM sheets WHERE sheet_date BETWEEN ? AND ? ORDER BY sheet_date
+    FROM sheets WHERE sheet_date BETWEEN ? AND ? ORDER BY sheet_date, id
   `).all(from, to);
 
   const totals = sheets.reduce(
@@ -253,9 +253,9 @@ machinesRouter.get('/:number', (req, res) => {
   if (!Number.isInteger(n) || n < 1) return res.status(400).json({ error: 'Invalid machine number' });
 
   const series = db.prepare(`
-    SELECT s.sheet_date, mr.prev_in, mr.curr_in, mr.daily_in, mr.prev_out, mr.curr_out, mr.daily_out
+    SELECT s.id AS sheet_id, s.sheet_date, mr.prev_in, mr.curr_in, mr.daily_in, mr.prev_out, mr.curr_out, mr.daily_out
     FROM machine_readings mr JOIN sheets s ON s.id = mr.sheet_id
-    WHERE mr.machine_number = ? ORDER BY s.sheet_date
+    WHERE mr.machine_number = ? ORDER BY s.sheet_date, s.id
   `).all(n);
 
   const totalIn = series.reduce((s, r) => s + r.daily_in, 0);
