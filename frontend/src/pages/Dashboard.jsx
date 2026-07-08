@@ -51,8 +51,6 @@ export default function Dashboard() {
           tone={totals.net_profit >= 0 ? 'good' : 'bad'}
           delta={delta('net_profit')}
         />
-        <Card label="Cash Profit" value={signedMoney(totals.cash_profit)} tone={totals.cash_profit == null ? '' : totals.cash_profit >= 0 ? 'good' : 'bad'} delta={delta('cash_profit')} />
-        <Card label="Over / Short" value={signedMoney(totals.over_short)} tone={totals.over_short == null ? '' : totals.over_short >= 0 ? 'good' : 'bad'} delta={delta('over_short')} />
         <Card label="Hold %" value={totals.hold_pct != null ? `${totals.hold_pct}%` : '—'} />
       </div>
 
