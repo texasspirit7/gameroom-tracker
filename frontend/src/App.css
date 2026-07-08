@@ -71,6 +71,7 @@ body {
 .panel {
   background: var(--panel); border-radius: var(--radius); box-shadow: var(--shadow);
   padding: 20px; margin-bottom: 22px;
+  overflow-x: auto; -webkit-overflow-scrolling: touch;
 }
 .panel h2 { margin: 0 0 14px; font-size: 15px; display: flex; align-items: center; gap: 8px; }
 .panel h2::before { content: ''; width: 4px; height: 16px; border-radius: 2px; background: linear-gradient(180deg, var(--accent), var(--accent-2)); }
@@ -256,4 +257,96 @@ input.cell { width: 90px; padding: 4px 6px; font-size: 12px; text-align: right; 
   filter: grayscale(0.15);
   line-height: 1;
   user-select: none;
+}
+
+/* ---------- Mobile layout ---------- */
+
+.mobile-topbar { display: none; }
+.sidebar-close { display: none; }
+.sidebar-backdrop { display: none; }
+
+@media (max-width: 860px) {
+  .mobile-topbar {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    position: sticky;
+    top: var(--lights-height);
+    z-index: 45;
+    height: 52px;
+    padding: 0 14px;
+    background: linear-gradient(180deg, #122340, #0b1830);
+    color: #fff;
+    font-weight: 700;
+  }
+  .mobile-menu-btn {
+    background: none; box-shadow: none; padding: 8px; border-radius: 8px;
+    display: flex; flex-direction: column; justify-content: center; gap: 4px;
+    width: 34px; height: 34px;
+  }
+  .mobile-menu-btn:hover { background: rgba(255,255,255,0.08); filter: none; }
+  .mobile-menu-btn span { display: block; width: 18px; height: 2px; background: #fff; border-radius: 2px; }
+  .mobile-topbar-brand { font-size: 15px; }
+
+  .layout { display: block; min-height: 0; }
+
+  .sidebar {
+    position: fixed;
+    left: 0;
+    top: var(--lights-height);
+    height: calc(100vh - var(--lights-height));
+    width: 260px;
+    max-width: 82vw;
+    z-index: 60;
+    transform: translateX(-100%);
+    transition: transform 0.25s ease;
+    box-shadow: 6px 0 28px rgba(0,0,0,0.35);
+  }
+  .sidebar.open { transform: translateX(0); }
+  .sidebar-close {
+    display: block; margin-left: auto; background: none; box-shadow: none;
+    color: #b8c6e2; font-size: 16px; padding: 4px 8px;
+  }
+  .sidebar-close:hover { background: rgba(255,255,255,0.08); filter: none; }
+
+  .sidebar-backdrop {
+    display: block; position: fixed; inset: 0;
+    top: var(--lights-height);
+    background: rgba(8, 14, 28, 0.55);
+    z-index: 55;
+  }
+
+  .content { max-width: 100%; padding: 16px 14px; }
+
+  .cards { grid-template-columns: repeat(auto-fit, minmax(140px, 1fr)); gap: 10px; }
+  .card { padding: 12px 14px; }
+  .card .value { font-size: 19px; }
+
+  .casino-backdrop { display: none; }
+
+  table { font-size: 12px; }
+  th, td { padding: 6px 8px; }
+
+  .daterange-panel {
+    position: fixed;
+    top: calc(var(--lights-height) + 60px);
+    left: 10px;
+    right: 10px;
+    min-width: 0;
+    max-width: none;
+    flex-direction: column;
+    max-height: 70vh;
+    overflow-y: auto;
+  }
+  .daterange-presets {
+    border-right: none; border-bottom: 1px solid var(--line);
+    flex-direction: row; flex-wrap: wrap; min-width: 0;
+  }
+  .daterange-presets button { flex: 1 1 auto; text-align: center; }
+  .daterange-sub { display: none; }
+
+  .form-row { gap: 10px; }
+  .form-row label { flex: 1 1 140px; }
+
+  .gate-card { padding: 28px 22px; }
 }

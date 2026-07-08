@@ -1,3 +1,4 @@
+import { useEffect, useState } from 'react';
 import { NavLink, Route, Routes, useLocation } from 'react-router-dom';
 import { DateRangeProvider } from './DateRangeContext.jsx';
 import { AuthProvider, useAuth } from './AuthContext.jsx';
@@ -50,15 +51,33 @@ function SidebarFooter() {
 }
 
 function AppShell() {
+  const [navOpen, setNavOpen] = useState(false);
+  const { pathname } = useLocation();
+
+  // Close the mobile drawer whenever the route changes
+  useEffect(() => { setNavOpen(false); }, [pathname]);
+
   return (
     <div className="layout">
-      <aside className="sidebar">
+      <div className="mobile-topbar">
+        <button className="mobile-menu-btn" aria-label="Open menu" onClick={() => setNavOpen(true)}>
+          <span />
+          <span />
+          <span />
+        </button>
+        <span className="mobile-topbar-brand">🎰 La Pryor</span>
+      </div>
+
+      {navOpen && <div className="sidebar-backdrop" onClick={() => setNavOpen(false)} />}
+
+      <aside className={`sidebar ${navOpen ? 'open' : ''}`}>
         <div className="brand">
           <span className="brand-icon">🎰</span>
           <div>
             <div className="brand-name">La Pryor</div>
             <div className="brand-sub">Game Room Tracker</div>
           </div>
+          <button className="sidebar-close" aria-label="Close menu" onClick={() => setNavOpen(false)}>✕</button>
         </div>
         <nav>
           {NAV.map((item) => (
