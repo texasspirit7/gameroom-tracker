@@ -77,7 +77,7 @@ export default function Machines() {
             <thead>
               <tr>
                 <th>#</th><th>Days</th><th>Active</th><th>Total In</th><th>Total Out</th>
-                <th>Net Profit</th><th>Hold %</th><th>Average Daily In</th><th>Maximum Payout</th><th>Flag</th>
+                <th>Net Profit</th><th>Hold %</th><th>Average Daily In</th><th>Average Daily Out</th><th>Maximum Payout</th><th>Flag</th>
               </tr>
             </thead>
             <tbody>
@@ -93,6 +93,7 @@ export default function Machines() {
                     {m.hold_pct == null ? '—' : `${m.hold_pct}%`}
                   </td>
                   <td>${fmt(m.avg_in)}</td>
+                  <td>${fmt(m.avg_out)}</td>
                   <td>${fmt(m.max_out)}</td>
                   <td>{m.flag ? <span className={`badge ${m.flag}`}>{m.flag}</span> : '—'}</td>
                 </tr>
