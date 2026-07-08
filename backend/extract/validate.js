@@ -68,12 +68,11 @@ export function validateSheet({ sheetDate, machines, totals, excludeSheetId }) {
   return { warnings };
 }
 
-/** meter profit = (total_in + loan_rtn) − (total_out + match + expenses) */
-export function computeMeterProfit({ totals, settlement, expenses }) {
+/** meter profit = (total_in + loan_rtn) − (total_out + match) — no expenses */
+export function computeMeterProfit({ totals, settlement }) {
   const totalIn = Number(totals?.total_in) || 0;
   const totalOut = Number(totals?.total_out) || 0;
   const loanRtn = Number(settlement?.loan_rtn) || 0;
   const match = Number(settlement?.match_amount) || 0;
-  const expenseSum = (expenses || []).reduce((s, e) => s + (Number(e.amount) || 0), 0);
-  return totalIn + loanRtn - (totalOut + match + expenseSum);
+  return totalIn + loanRtn - (totalOut + match);
 }

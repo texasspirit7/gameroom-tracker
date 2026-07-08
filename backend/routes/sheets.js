@@ -34,8 +34,10 @@ function saveUploadedFile(file, sheetDate) {
 }
 
 function persistSheet({ extracted, sheetDate, source, filePath, warnings }) {
-  const meterProfit =
-    extracted.bank?.meter_profit ?? computeMeterProfit(extracted);
+  // Always computed by the app, not trusted from the sheet's own printed
+  // "Profit (Loss)" box — that figure is whatever the paper's author
+  // calculated by hand and isn't a consistent formula sheet to sheet.
+  const meterProfit = computeMeterProfit(extracted);
   const cashProfit = extracted.bank?.cash_profit ?? null;
   const overShort =
     cashProfit != null ? cashProfit - meterProfit : extracted.bank?.over_short ?? null;
@@ -189,13 +191,13 @@ sheetsRouter.patch('/:id', adminGate, (req, res) => {
   // Recompute derived fields + re-validate
   const updated = db.prepare('SELECT * FROM sheets WHERE id = ?').get(id);
   const rows = db.prepare('SELECT * FROM machine_readings WHERE sheet_id = ?').all(id);
-  const exps = db.prepare('SELECT * FROM expenses WHERE sheet_id = ?').all(id);
   const meterProfit = computeMeterProfit({
     totals: { total_in: updated.total_in, total_out: updated.total_out },
     settlement: { match_amount: updated.match_amount, loan_rtn: updated.loan_rtn },
-    expenses: exps,
   });
-  const overShort = updated.cash_profit != null ? updated.cash_profit - meterProfit : null;
+  // If cash_profit isn't set, leave over_short as whatever it already was (e.g. a value
+  // extracted from the sheet's own printed Short/Over box) rather than wiping it to null.
+  const overShort = updated.cash_profit != null ? updated.cash_profit - meterProfit : updated.over_short;
   const { warnings } = validateSheet({
     sheetDate: updated.sheet_date, machines: rows,
     totals: { total_in: updated.total_in, total_out: updated.total_out },

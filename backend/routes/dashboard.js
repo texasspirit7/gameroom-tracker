@@ -89,7 +89,9 @@ function aggregate(from, to) {
     WHERE s.sheet_date BETWEEN ? AND ?
   `).get(from, to).s;
   totals.expenses_total = totals.sheet_expenses + totals.other_expenses;
-  totals.net_profit = totals.meter_profit - totals.other_expenses;
+  // meter_profit no longer subtracts expenses (see computeMeterProfit) — net_profit
+  // subtracts all of them (sheet + other) to get the true bottom line.
+  totals.net_profit = totals.meter_profit - totals.expenses_total;
 
   return { sheets, totals };
 }
