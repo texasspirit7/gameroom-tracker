@@ -2,23 +2,35 @@ import { Router } from 'express';
 import { db } from '../db.js';
 import { adminGate } from '../auth.js';
 
-export const otherExpensesRouter = Router();
+export const expensesRouter = Router();
 
 const DATE_RE = /^\d{4}-\d{2}-\d{2}$/;
 
-// GET /api/other-expenses?from&to
-otherExpensesRouter.get('/', (req, res) => {
+// GET /api/expenses?from&to — combined view: sheet-derived expenses (pay, food,
+// cleaning, etc. from uploaded sheets) + manually logged ones (rent, electricity, etc.)
+expensesRouter.get('/', (req, res) => {
   const from = DATE_RE.test(req.query.from) ? req.query.from : '0001-01-01';
   const to = DATE_RE.test(req.query.to) ? req.query.to : '9999-12-31';
-  const rows = db.prepare(
-    'SELECT * FROM other_expenses WHERE expense_date BETWEEN ? AND ? ORDER BY expense_date DESC, id DESC'
-  ).all(from, to);
-  const total = rows.reduce((s, r) => s + (r.amount || 0), 0);
-  res.json({ expenses: rows, total });
+
+  const sheetRows = db.prepare(`
+    SELECT e.id, s.sheet_date AS date, e.category, e.amount, e.note, e.sheet_id
+    FROM expenses e JOIN sheets s ON s.id = e.sheet_id
+    WHERE s.sheet_date BETWEEN ? AND ?
+  `).all(from, to).map((r) => ({ ...r, source: 'sheet', created_by: null }));
+
+  const otherRows = db.prepare(`
+    SELECT id, expense_date AS date, category, amount, note, created_by
+    FROM other_expenses WHERE expense_date BETWEEN ? AND ?
+  `).all(from, to).map((r) => ({ ...r, source: 'other', sheet_id: null }));
+
+  const expenses = [...sheetRows, ...otherRows].sort((a, b) => b.date.localeCompare(a.date) || b.id - a.id);
+  const total = expenses.reduce((s, r) => s + (r.amount || 0), 0);
+  res.json({ expenses, total });
 });
 
-// POST /api/other-expenses — everyone who's signed in and approved can log an entry
-otherExpensesRouter.post('/', (req, res) => {
+// POST /api/expenses — everyone who's signed in and approved can log a manual entry.
+// Always creates an 'other' expense — sheet-derived ones only come from sheet uploads.
+expensesRouter.post('/', (req, res) => {
   const { expense_date, category, amount, note } = req.body || {};
   if (!DATE_RE.test(expense_date)) return res.status(400).json({ error: 'expense_date must be YYYY-MM-DD' });
   if (!category || !String(category).trim()) return res.status(400).json({ error: 'category is required' });
@@ -32,11 +44,12 @@ otherExpensesRouter.post('/', (req, res) => {
   res.json({ id: result.lastInsertRowid });
 });
 
-// PATCH /api/other-expenses/:id (admin-only once auth is on)
-otherExpensesRouter.patch('/:id', adminGate, (req, res) => {
+// PATCH /api/expenses/:id (admin-only once auth is on) — only manually logged entries
+// are editable here; a sheet's own expenses are edited via that sheet's detail page.
+expensesRouter.patch('/:id', adminGate, (req, res) => {
   const id = Number(req.params.id);
   const existing = db.prepare('SELECT * FROM other_expenses WHERE id = ?').get(id);
-  if (!existing) return res.status(404).json({ error: 'Expense not found' });
+  if (!existing) return res.status(404).json({ error: 'Expense not found (only manually logged entries can be edited here)' });
 
   const { expense_date, category, amount, note } = req.body || {};
   const next = {
@@ -50,9 +63,9 @@ otherExpensesRouter.patch('/:id', adminGate, (req, res) => {
   res.json({ ok: true });
 });
 
-// DELETE /api/other-expenses/:id (admin-only once auth is on)
-otherExpensesRouter.delete('/:id', adminGate, (req, res) => {
+// DELETE /api/expenses/:id (admin-only once auth is on) — only manually logged entries
+expensesRouter.delete('/:id', adminGate, (req, res) => {
   const result = db.prepare('DELETE FROM other_expenses WHERE id = ?').run(Number(req.params.id));
-  if (!result.changes) return res.status(404).json({ error: 'Expense not found' });
+  if (!result.changes) return res.status(404).json({ error: 'Expense not found (only manually logged entries can be deleted here)' });
   res.json({ ok: true });
 });

@@ -7,7 +7,7 @@ import { config } from './config.js';
 import { db } from './db.js';
 import { sheetsRouter } from './routes/sheets.js';
 import { dashboardRouter, machinesRouter } from './routes/dashboard.js';
-import { otherExpensesRouter } from './routes/otherExpenses.js';
+import { expensesRouter } from './routes/expenses.js';
 import { authRouter, adminRouter } from './routes/auth.js';
 import { requireAuth, requireApproved } from './auth.js';
 
@@ -41,7 +41,7 @@ if (config.authEnabled) {
 app.use('/api/sheets', sheetsRouter);
 app.use('/api/dashboard', dashboardRouter);
 app.use('/api/machines', machinesRouter);
-app.use('/api/other-expenses', otherExpensesRouter);
+app.use('/api/expenses', expensesRouter);
 
 // Serve built frontend when it exists (production / local single-server mode)
 const dist = path.join(__dirname, '..', 'frontend', 'dist');

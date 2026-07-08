@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react';
+import { Link } from 'react-router-dom';
 import { api, fmt } from '../api.js';
 import { todayISO } from '../dateRange.js';
 import { useDateRange } from '../DateRangeContext.jsx';
@@ -6,7 +7,7 @@ import { useAuth } from '../AuthContext.jsx';
 
 const CATEGORY_SUGGESTIONS = ['Rent', 'Electricity', 'Water', 'Internet', 'Insurance', 'Repairs & Maintenance', 'Supplies', 'Other'];
 
-export default function OtherExpenses() {
+export default function Expenses() {
   const { from, to, label, preset } = useDateRange();
   const { isAdmin, authEnabled } = useAuth();
   const canModify = !authEnabled || isAdmin;
@@ -19,7 +20,7 @@ export default function OtherExpenses() {
 
   const load = () => {
     const params = preset === 'allTime' ? '' : `?from=${from}&to=${to}`;
-    api.otherExpenses(params).then(setData).catch((e) => setError(e.message));
+    api.expenses(params).then(setData).catch((e) => setError(e.message));
   };
   useEffect(() => { load(); }, [from, to, preset]);
 
@@ -28,7 +29,7 @@ export default function OtherExpenses() {
     setFormError(null);
     setSaving(true);
     try {
-      await api.addOtherExpense({ ...form, amount: Number(form.amount) });
+      await api.addExpense({ ...form, amount: Number(form.amount) });
       setForm({ expense_date: todayISO(), category: '', amount: '', note: '' });
       load();
     } catch (err) {
@@ -40,16 +41,29 @@ export default function OtherExpenses() {
 
   const remove = async (id) => {
     if (!window.confirm('Delete this expense?')) return;
-    await api.deleteOtherExpense(id);
+    await api.deleteExpense(id);
     load();
   };
 
   if (error) return <div className="error-box">{error}</div>;
 
+  // Category breakdown for a quick summary above the full list
+  const byCategory = data
+    ? Object.entries(
+        data.expenses.reduce((acc, e) => {
+          acc[e.category] = (acc[e.category] || 0) + e.amount;
+          return acc;
+        }, {})
+      ).sort((a, b) => b[1] - a[1])
+    : [];
+
   return (
     <>
-      <h1 className="page-title">Other Expenses</h1>
-      <div className="page-sub">Recurring overhead — rent, electricity, water, etc. — kept separate from daily sheet reconciliation.</div>
+      <h1 className="page-title">Expenses</h1>
+      <div className="page-sub">
+        Every expense in one place — pay, food, and supplies pulled automatically from daily sheets,
+        plus recurring overhead (rent, electricity, etc.) you log here yourself.
+      </div>
 
       <div className="panel">
         <h2>Log an expense</h2>
@@ -82,27 +96,49 @@ export default function OtherExpenses() {
         {formError && <div className="error-box">{formError}</div>}
       </div>
 
+      {byCategory.length > 0 && (
+        <div className="panel">
+          <h2>By category — {label}</h2>
+          <table>
+            <thead><tr><th>Category</th><th>Amount</th></tr></thead>
+            <tbody>
+              {byCategory.map(([category, amount]) => (
+                <tr key={category}><td>{category}</td><td>${fmt(amount)}</td></tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      )}
+
       <div className="panel">
         <h2>{label} — {data ? `$${fmt(data.total)} total` : '…'}</h2>
         {!data ? (
           <p className="muted"><span className="spinner" />Loading…</p>
         ) : data.expenses.length === 0 ? (
-          <p className="muted">No expenses logged in this range.</p>
+          <p className="muted">No expenses in this range.</p>
         ) : (
           <table>
             <thead>
-              <tr><th>Date</th><th>Category</th><th>Amount</th><th>Note</th><th>Logged by</th>{canModify && <th></th>}</tr>
+              <tr><th>Date</th><th>Category</th><th>Amount</th><th>Note</th><th>Source</th>{canModify && <th></th>}</tr>
             </thead>
             <tbody>
               {data.expenses.map((e) => (
-                <tr key={e.id}>
-                  <td>{e.expense_date}</td>
+                <tr key={`${e.source}-${e.id}`}>
+                  <td>{e.date}</td>
                   <td>{e.category}</td>
                   <td>${fmt(e.amount)}</td>
                   <td>{e.note || '—'}</td>
-                  <td>{e.created_by || '—'}</td>
+                  <td>
+                    {e.source === 'sheet'
+                      ? <Link to={`/sheets/${e.sheet_id}`}>sheet #{e.sheet_id}</Link>
+                      : (e.created_by || 'logged manually')}
+                  </td>
                   {canModify && (
-                    <td><button className="danger row-action" onClick={() => remove(e.id)}>Delete</button></td>
+                    <td>
+                      {e.source === 'other'
+                        ? <button className="danger row-action" onClick={() => remove(e.id)}>Delete</button>
+                        : <span className="muted" style={{ fontSize: 12 }}>edit on sheet</span>}
+                    </td>
                   )}
                 </tr>
               ))}

@@ -11,7 +11,7 @@ import Sheets from './pages/Sheets.jsx';
 import SheetDetail from './pages/SheetDetail.jsx';
 import Machines from './pages/Machines.jsx';
 import MachineDetail from './pages/MachineDetail.jsx';
-import OtherExpenses from './pages/OtherExpenses.jsx';
+import Expenses from './pages/Expenses.jsx';
 import AdminUsers from './pages/AdminUsers.jsx';
 
 const NAV = [
@@ -19,12 +19,12 @@ const NAV = [
   { to: '/upload', label: 'Upload Sheet', icon: '📤' },
   { to: '/sheets', label: 'Daily Sheets', icon: '🗂️' },
   { to: '/machines', label: 'Machines', icon: '🎰' },
-  { to: '/other-expenses', label: 'Other Expenses', icon: '🧾' },
+  { to: '/expenses', label: 'Expenses', icon: '🧾' },
   { to: '/admin', label: 'Admin — Users', icon: '🛡️' },
 ];
 
 // The date range picker only affects data on these routes
-const DATE_RANGE_ROUTES = ['/', '/machines', '/other-expenses'];
+const DATE_RANGE_ROUTES = ['/', '/machines', '/expenses'];
 
 function Topbar() {
   const { pathname } = useLocation();
@@ -80,7 +80,7 @@ function AppShell() {
           <Route path="/sheets/:id" element={<SheetDetail />} />
           <Route path="/machines" element={<Machines />} />
           <Route path="/machines/:number" element={<MachineDetail />} />
-          <Route path="/other-expenses" element={<OtherExpenses />} />
+          <Route path="/expenses" element={<Expenses />} />
           <Route path="/admin" element={<AdminUsers />} />
         </Routes>
       </main>

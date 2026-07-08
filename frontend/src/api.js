@@ -32,9 +32,9 @@ export const api = {
   verifySheet: (id) => request(`/api/sheets/${id}/verify`, { method: 'POST' }),
   deleteSheet: (id) => request(`/api/sheets/${id}`, { method: 'DELETE' }),
 
-  otherExpenses: (params = '') => request(`/api/other-expenses${params}`),
-  addOtherExpense: (body) => request('/api/other-expenses', { method: 'POST', body: JSON.stringify(body) }),
-  deleteOtherExpense: (id) => request(`/api/other-expenses/${id}`, { method: 'DELETE' }),
+  expenses: (params = '') => request(`/api/expenses${params}`),
+  addExpense: (body) => request('/api/expenses', { method: 'POST', body: JSON.stringify(body) }),
+  deleteExpense: (id) => request(`/api/expenses/${id}`, { method: 'DELETE' }),
 
   authConfig: () => request('/api/auth/config'),
   me: () => request('/api/auth/me'),

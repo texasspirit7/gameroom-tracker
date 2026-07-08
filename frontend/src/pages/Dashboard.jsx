@@ -110,7 +110,7 @@ export default function Dashboard() {
         </div>
 
         <div className="panel">
-          <h2>Expenses — {range.label} <span className="muted" style={{ fontWeight: 400, fontSize: 12 }}>(sheet + <Link to="/other-expenses">other</Link>)</span></h2>
+          <h2>Expenses — {range.label} <span className="muted" style={{ fontWeight: 400, fontSize: 12 }}>(sheet + <Link to="/expenses">manual</Link>)</span></h2>
           {expenses.length ? (
             <ResponsiveContainer width="100%" height={240}>
               <BarChart data={expenses} layout="vertical" margin={{ left: 20 }}>
@@ -124,9 +124,9 @@ export default function Dashboard() {
             </ResponsiveContainer>
           ) : <p className="muted">No expenses recorded in this range.</p>}
           <p className="muted" style={{ fontSize: 12 }}>
-            Sheet expenses (pay, food, supplies, etc.) are already subtracted in Meter Profit.
-            {' '}<Link to="/other-expenses">Other Expenses</Link> (${fmt(otherExpensesTotal)}) are subtracted
-            on top of that to get Net Profit.
+            Meter Profit doesn't subtract any expenses. Net Profit (After Overhead) subtracts all of
+            them — sheet expenses (pay, food, supplies) plus whatever you log manually on the
+            {' '}<Link to="/expenses">Expenses</Link> page (${fmt(otherExpensesTotal)}).
           </p>
         </div>
       </div>
