@@ -4,6 +4,10 @@ on:
     branches: [main]
   workflow_dispatch: {}
 
+permissions:
+  id-token: write
+  contents: read
+
 jobs:
   build-and-deploy:
     runs-on: ubuntu-latest
@@ -23,9 +27,15 @@ jobs:
           mkdir -p deploy/backend deploy/frontend
           cp -r backend/* deploy/backend/
           cp -r frontend/dist deploy/frontend/dist
+          cd deploy && zip -r ../deploy.zip . -x '.*'
 
-      - uses: azure/webapps-deploy@v3
+      - uses: azure/login@v2
         with:
-          app-name: la-pryor
-          publish-profile: ${{ secrets.AZURE_WEBAPP_PUBLISH_PROFILE }}
-          package: deploy
+          client-id: ${{ vars.AZURE_CLIENT_ID }}
+          tenant-id: ${{ vars.AZURE_TENANT_ID }}
+          subscription-id: ${{ vars.AZURE_SUBSCRIPTION_ID }}
+
+      - name: Deploy to Azure Web App (zip deploy)
+        run: |
+          az webapp deploy --resource-group gameroom-rg --name la-pryor \
+            --src-path deploy.zip --type zip
