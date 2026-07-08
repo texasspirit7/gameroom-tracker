@@ -141,7 +141,7 @@ input.cell { width: 90px; padding: 4px 6px; font-size: 12px; text-align: right; 
 .toolbar { display: flex; gap: 10px; align-items: center; margin-bottom: 16px; flex-wrap: wrap; }
 .spacer { flex: 1; }
 
-.topbar { display: flex; justify-content: flex-end; margin-bottom: 6px; min-height: 38px; }
+.content > .topbar { display: flex; justify-content: flex-end; margin-bottom: 6px; min-height: 38px; position: relative; z-index: 25; }
 .segmented {
   display: inline-flex; background: #e8edf5; border-radius: 10px; padding: 3px; gap: 2px;
 }
