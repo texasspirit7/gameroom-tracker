@@ -1,7 +1,9 @@
-import { createContext, useContext, useEffect, useState } from 'react';
+import { createContext, useContext, useEffect, useRef, useState } from 'react';
 import { api } from './api.js';
 
 const AuthContext = createContext(null);
+const INACTIVITY_LIMIT_MS = 10 * 60 * 1000;
+const ACTIVITY_EVENTS = ['mousedown', 'mousemove', 'keydown', 'scroll', 'touchstart', 'wheel'];
 
 export function AuthProvider({ children }) {
   const [loading, setLoading] = useState(true);
@@ -63,6 +65,29 @@ export function AuthProvider({ children }) {
     await api.logout();
     setUser(null);
   };
+
+  const logoutRef = useRef(logout);
+  logoutRef.current = logout;
+
+  useEffect(() => {
+    if (!authEnabled || !user) return;
+
+    let timer;
+    const resetTimer = () => {
+      clearTimeout(timer);
+      timer = setTimeout(() => {
+        logoutRef.current();
+      }, INACTIVITY_LIMIT_MS);
+    };
+
+    resetTimer();
+    ACTIVITY_EVENTS.forEach((evt) => window.addEventListener(evt, resetTimer));
+
+    return () => {
+      clearTimeout(timer);
+      ACTIVITY_EVENTS.forEach((evt) => window.removeEventListener(evt, resetTimer));
+    };
+  }, [authEnabled, user]);
 
   const isAdmin = user?.role === 'admin';
 
