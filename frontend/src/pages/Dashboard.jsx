@@ -51,7 +51,6 @@ export default function Dashboard() {
           tone={totals.net_profit >= 0 ? 'good' : 'bad'}
           delta={delta('net_profit')}
         />
-        <Card label="Hold %" value={totals.hold_pct != null ? `${totals.hold_pct}%` : '—'} />
       </div>
 
       <div className="panel">
