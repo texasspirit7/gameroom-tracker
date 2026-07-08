@@ -2,7 +2,7 @@ import { Router } from 'express';
 import { config } from '../config.js';
 import {
   verifyGoogleCredential, verifyLocalCredential, findOrCreateUser, issueSession, clearSession,
-  publicUser, requireAuth, requireAdmin,
+  publicUser, requireAuth, requireApproved, requireAdmin,
 } from '../auth.js';
 import { db } from '../db.js';
 
@@ -50,13 +50,14 @@ authRouter.post('/logout', (req, res) => {
   res.json({ ok: true });
 });
 
-adminRouter.use(requireAuth, requireAdmin);
+// Any approved user can VIEW the users list — only admins can approve/block/change roles.
+adminRouter.use(requireAuth, requireApproved);
 
 adminRouter.get('/users', (req, res) => {
   res.json(db.prepare('SELECT id, email, name, role, status, created_at, approved_at, approved_by FROM users ORDER BY created_at DESC').all());
 });
 
-adminRouter.post('/users/:id/approve', (req, res) => {
+adminRouter.post('/users/:id/approve', requireAdmin, (req, res) => {
   const result = db.prepare(
     "UPDATE users SET status = 'approved', approved_at = datetime('now'), approved_by = ? WHERE id = ?"
   ).run(req.user.email, Number(req.params.id));
@@ -64,7 +65,7 @@ adminRouter.post('/users/:id/approve', (req, res) => {
   res.json({ ok: true });
 });
 
-adminRouter.post('/users/:id/block', (req, res) => {
+adminRouter.post('/users/:id/block', requireAdmin, (req, res) => {
   const id = Number(req.params.id);
   if (id === req.user.id) return res.status(400).json({ error: "You can't block your own account" });
   const result = db.prepare("UPDATE users SET status = 'blocked' WHERE id = ?").run(id);
@@ -72,7 +73,7 @@ adminRouter.post('/users/:id/block', (req, res) => {
   res.json({ ok: true });
 });
 
-adminRouter.post('/users/:id/role', (req, res) => {
+adminRouter.post('/users/:id/role', requireAdmin, (req, res) => {
   const id = Number(req.params.id);
   const role = req.body?.role;
   if (!['admin', 'user'].includes(role)) return res.status(400).json({ error: "role must be 'admin' or 'user'" });

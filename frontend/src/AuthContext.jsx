@@ -6,6 +6,8 @@ const AuthContext = createContext(null);
 export function AuthProvider({ children }) {
   const [loading, setLoading] = useState(true);
   const [authEnabled, setAuthEnabled] = useState(false);
+  const [authProvider, setAuthProvider] = useState('local');
+  const [googleClientId, setGoogleClientId] = useState('');
   const [user, setUser] = useState(null);
   const [error, setError] = useState(null);
 
@@ -14,6 +16,8 @@ export function AuthProvider({ children }) {
     try {
       const cfg = await api.authConfig();
       setAuthEnabled(cfg.authEnabled);
+      setAuthProvider(cfg.authProvider);
+      setGoogleClientId(cfg.googleClientId || '');
       if (!cfg.authEnabled) {
         setUser(null);
         return;
@@ -43,6 +47,18 @@ export function AuthProvider({ children }) {
     }
   };
 
+  const loginWithGoogle = async (credential) => {
+    setError(null);
+    try {
+      const { user: me } = await api.loginGoogle(credential);
+      setUser(me);
+      return true;
+    } catch (e) {
+      setError(e.message);
+      return false;
+    }
+  };
+
   const logout = async () => {
     await api.logout();
     setUser(null);
@@ -51,7 +67,10 @@ export function AuthProvider({ children }) {
   const isAdmin = user?.role === 'admin';
 
   return (
-    <AuthContext.Provider value={{ loading, authEnabled, user, error, login, logout, isAdmin, refresh }}>
+    <AuthContext.Provider value={{
+      loading, authEnabled, authProvider, googleClientId, user, error,
+      login, loginWithGoogle, logout, isAdmin, refresh,
+    }}>
       {children}
     </AuthContext.Provider>
   );

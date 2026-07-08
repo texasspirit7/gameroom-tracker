@@ -84,6 +84,7 @@ tr.clickable { cursor: pointer; }
 .badge.dead { background: #eceff4; color: #7a8496; }
 .badge.bleeding { background: #fde8e8; color: var(--bad); }
 .badge.negative { background: #fdf3e0; color: var(--warn); }
+.badge.profit { background: #e2f5e9; color: var(--good); }
 .badge.review { background: #fdf3e0; color: var(--warn); }
 .badge.verified { background: #e2f5e9; color: var(--good); }
 .badge.high { background: #fde8e8; color: var(--bad); }

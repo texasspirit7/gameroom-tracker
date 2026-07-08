@@ -39,6 +39,7 @@ export const api = {
   authConfig: () => request('/api/auth/config'),
   me: () => request('/api/auth/me'),
   loginLocal: (name, email) => request('/api/auth/local', { method: 'POST', body: JSON.stringify({ name, email }) }),
+  loginGoogle: (credential) => request('/api/auth/google', { method: 'POST', body: JSON.stringify({ credential }) }),
   logout: () => request('/api/auth/logout', { method: 'POST' }),
 
   adminUsers: () => request('/api/admin/users'),

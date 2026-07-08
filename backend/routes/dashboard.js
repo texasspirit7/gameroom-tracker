@@ -83,6 +83,8 @@ function aggregate(from, to) {
   totals.hold_pct = holdPct(totals.total_in, totals.total_out);
   totals.sheet_count = sheets.length;
   totals.match = db.prepare('SELECT COALESCE(SUM(match_amount),0) AS m FROM sheets WHERE sheet_date BETWEEN ? AND ?').get(from, to).m;
+  totals.other_expenses = db.prepare('SELECT COALESCE(SUM(amount),0) AS s FROM other_expenses WHERE expense_date BETWEEN ? AND ?').get(from, to).s;
+  totals.net_profit = totals.meter_profit - totals.other_expenses;
 
   return { sheets, totals };
 }
@@ -181,7 +183,6 @@ dashboardRouter.get('/', (req, res) => {
   const expenses = [...expenseMap.entries()]
     .map(([category, amount]) => ({ category, amount }))
     .sort((a, b) => b.amount - a.amount);
-  const otherExpensesTotal = otherExpenses.reduce((s, e) => s + e.amount, 0);
 
   const deadMachines = db.prepare(`
     SELECT machine_number FROM machine_readings mr JOIN sheets s ON s.id = mr.sheet_id
@@ -200,7 +201,7 @@ dashboardRouter.get('/', (req, res) => {
     buckets,
     alerts: alertsForRange(range.from, range.to, range.label),
     expenses,
-    otherExpensesTotal,
+    otherExpensesTotal: totals.other_expenses,
     deadMachines,
     latestDate,
   });
@@ -232,6 +233,7 @@ machinesRouter.get('/', (req, res) => {
     else if (r.total_in === 0 && r.total_out > 0) flag = 'bleeding';
     else if (hold != null && hold < -50) flag = 'bleeding';
     else if (hold != null && hold < 0) flag = 'negative';
+    else if (net > 0) flag = 'profit';
     return { ...r, net, hold_pct: hold, flag };
   });
 

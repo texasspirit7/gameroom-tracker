@@ -43,6 +43,12 @@ export default function Dashboard() {
         <Card label="Total In" value={`$${fmt(totals.total_in)}`} delta={delta('total_in')} />
         <Card label="Total Out" value={`$${fmt(totals.total_out)}`} delta={delta('total_out')} invert />
         <Card label="Meter Profit" value={signedMoney(totals.meter_profit)} tone={totals.meter_profit >= 0 ? 'good' : 'bad'} delta={delta('meter_profit')} />
+        <Card
+          label="Net Profit (after overhead)"
+          value={signedMoney(totals.net_profit)}
+          tone={totals.net_profit >= 0 ? 'good' : 'bad'}
+          delta={delta('net_profit')}
+        />
         <Card label="Cash Profit" value={signedMoney(totals.cash_profit)} tone={totals.cash_profit == null ? '' : totals.cash_profit >= 0 ? 'good' : 'bad'} delta={delta('cash_profit')} />
         <Card label="Over / Short" value={signedMoney(totals.over_short)} tone={totals.over_short == null ? '' : totals.over_short >= 0 ? 'good' : 'bad'} delta={delta('over_short')} />
         <Card label="Hold %" value={totals.hold_pct != null ? `${totals.hold_pct}%` : '—'} />
@@ -120,6 +126,11 @@ export default function Dashboard() {
           <p className="muted" style={{ fontSize: 12 }}>
             Match play: ${fmt(totals.match)}
             {otherExpensesTotal > 0 && <> · Other expenses: ${fmt(otherExpensesTotal)}</>}
+          </p>
+          <p className="muted" style={{ fontSize: 12 }}>
+            Sheet expenses (pay, food, supplies, etc.) are already subtracted in Meter Profit.
+            {' '}<Link to="/other-expenses">Other Expenses</Link> (${fmt(otherExpensesTotal)}) are subtracted
+            on top of that to get Net Profit.
           </p>
         </div>
       </div>

@@ -18,6 +18,7 @@ const NAV = [
   { to: '/sheets', label: 'Daily Sheets', icon: '🗂️' },
   { to: '/machines', label: 'Machines', icon: '🎰' },
   { to: '/other-expenses', label: 'Other Expenses', icon: '🧾' },
+  { to: '/admin', label: 'Admin — Users', icon: '🛡️' },
 ];
 
 // The date range picker only affects data on these routes
@@ -47,9 +48,6 @@ function SidebarFooter() {
 }
 
 function AppShell() {
-  const { isAdmin } = useAuth();
-  const nav = isAdmin ? [...NAV, { to: '/admin', label: 'Admin — Users', icon: '🛡️' }] : NAV;
-
   return (
     <div className="layout">
       <aside className="sidebar">
@@ -61,7 +59,7 @@ function AppShell() {
           </div>
         </div>
         <nav>
-          {nav.map((item) => (
+          {NAV.map((item) => (
             <NavLink key={item.to} to={item.to} end={item.end}>
               <span className="nav-icon">{item.icon}</span>
               {item.label}
@@ -80,7 +78,7 @@ function AppShell() {
           <Route path="/machines" element={<Machines />} />
           <Route path="/machines/:number" element={<MachineDetail />} />
           <Route path="/other-expenses" element={<OtherExpenses />} />
-          {isAdmin && <Route path="/admin" element={<AdminUsers />} />}
+          <Route path="/admin" element={<AdminUsers />} />
         </Routes>
       </main>
     </div>

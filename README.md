@@ -36,10 +36,14 @@ Every upload is validated automatically:
 - one sheet per date — duplicates are rejected
 
 **Meter profit** = `(Total In + Loan RTN) − (Total Out + Match + expenses)` — what the
-machine meters say you made, from the numbers on the sheet.
+machine meters say you made, from the numbers on the sheet (sheet-recorded expenses
+like pay, food, and supplies are already subtracted here).
 **Cash profit** = what was actually counted in the bank/drawer that day.
 **Over/Short** = `Cash Profit − Meter Profit` — the gap between them, and the main
 fraud/error signal in the app.
+**Net profit (after overhead)** = `Meter Profit − Other Expenses` — the true bottom
+line once recurring overhead (rent, electricity, etc., logged on the Other Expenses
+page) is subtracted too. Shown as its own Dashboard card.
 
 ## Pages
 
@@ -49,10 +53,10 @@ fraud/error signal in the app.
 | Upload Sheet | Drag-and-drop upload with date picker — open to every approved user |
 | Daily Sheets | All sheets with status, warnings, P/L, and an admin-only Delete column |
 | Sheet detail | Editable meter table + summary fields (admin-only edit/verify/delete; others view read-only) |
-| Machines | Per-machine leaderboard: net, hold %, active days, max payout, flags (dead/bleeding/negative) |
+| Machines | Per-machine leaderboard: net, hold %, active days, max payout, flags (bleeding/negative/dead/profit) — sortable by any column including flag |
 | Machine detail | Daily in/out/net chart, best/worst day, full meter history, prev/next bounded to the actual machine numbers present |
-| Other Expenses | Recurring overhead (rent, electricity, etc.) logged separately from daily sheets; rolls into the Dashboard's expense breakdown |
-| Admin — Users | Approve/block accounts, promote/demote admins (visible to admins only) |
+| Other Expenses | Recurring overhead (rent, electricity, etc.) logged separately from daily sheets; rolls into the Dashboard's expense breakdown and Net Profit |
+| Admin — Users | Visible to every approved user (view-only); approve/block accounts and promote/demote admins is admin-only |
 
 Every data page (Dashboard, Machines, Other Expenses) shares one date-range picker
 top-right: Today, Yesterday, Last 7 Days, This/Last Week, This/Last Month, Last 30
@@ -70,19 +74,20 @@ Sign-in is **on by default**. Two roles:
 New sign-ins land in `pending` until an admin approves them from **Admin — Users**.
 Emails listed in `ADMIN_EMAILS` (`.env`) are auto-approved as admins on first sign-in.
 
-Sign-in itself is currently **local**: a name + email form with no password and no
-external verification (`AUTH_PROVIDER=local`, the default). This exists so
-roles/approval can be used today, before real Google OAuth is set up. To switch to
-verified Google sign-in later: create an OAuth 2.0 Web client in Google Cloud
-Console, set `GOOGLE_CLIENT_ID` in `.env` (this alone flips `AUTH_PROVIDER` to
-`google`) — no other code changes needed.
+Sign-in itself defaults to **local**: a name + email form with no password and no
+external verification (`AUTH_PROVIDER=local`). This exists so roles/approval can be
+used today, before real Google OAuth is set up. Setting `GOOGLE_CLIENT_ID` in `.env`
+flips `AUTH_PROVIDER` to `google` automatically — the frontend swaps in a real
+"Sign in with Google" button (Google Identity Services), no other code changes needed.
 
 To turn sign-in off entirely for local testing, set `AUTH_ENABLED=false`.
 
-## Azure hosting (later phase)
+## Azure hosting
 
-Planned: Azure App Service (Linux, Node 22), startup command `node backend/server.js`,
-`DATA_DIR=/home/data` for persistent SQLite + uploads, secrets in App Service
-configuration, GitHub Actions deploy. The app already serves the built frontend from
-one server, reads `PORT` from the environment, and refuses to boot in production
-without a real `JWT_SECRET` — no code changes needed to deploy.
+Full step-by-step instructions — Google OAuth setup, Azure resource creation,
+persistent storage for SQLite, environment variables, and a GitHub Actions deploy
+workflow — are in [`docs/AZURE_DEPLOYMENT.md`](docs/AZURE_DEPLOYMENT.md).
+
+The app is deploy-ready as-is: it serves the built frontend from one Node process,
+reads `PORT` from the environment (don't override it on Azure), and refuses to boot
+in production without a real `JWT_SECRET`.

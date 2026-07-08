@@ -3,11 +3,16 @@ import { useNavigate } from 'react-router-dom';
 import { api, fmt, signedMoney } from '../api.js';
 import { useDateRange } from '../DateRangeContext.jsx';
 
+// Worst-first: bleeding > negative > dead > (no flag) > profit
+const FLAG_RANK = { bleeding: 0, negative: 1, dead: 2, profit: 4 };
+const flagRank = (f) => FLAG_RANK[f] ?? 3;
+
 const SORTS = {
   number: (a, b) => a.machine_number - b.machine_number,
   net: (a, b) => b.net - a.net,
   in: (a, b) => b.total_in - a.total_in,
   hold: (a, b) => (b.hold_pct ?? -Infinity) - (a.hold_pct ?? -Infinity),
+  flag: (a, b) => flagRank(a.flag) - flagRank(b.flag) || a.net - b.net,
 };
 
 export default function Machines() {
@@ -62,6 +67,7 @@ export default function Machines() {
             <option value="net">Sort: net profit</option>
             <option value="in">Sort: total in</option>
             <option value="hold">Sort: hold %</option>
+            <option value="flag">Sort: flag</option>
           </select>
         </div>
         {rows.length === 0 ? (
