@@ -130,11 +130,16 @@ sheetsRouter.post('/upload', upload.single('file'), async (req, res) => {
 // GET /api/sheets
 sheetsRouter.get('/', (req, res) => {
   const sheets = db.prepare(`
-    SELECT id, sheet_date, source, total_in, total_out, meter_profit, cash_profit,
-           over_short, status, validation_json, created_at
-    FROM sheets ORDER BY sheet_date DESC, id DESC
+    SELECT s.id, s.sheet_date, s.source, s.total_in, s.total_out, s.match_amount,
+           s.meter_profit, s.cash_profit, s.over_short, s.status, s.validation_json, s.created_at,
+           COALESCE((SELECT SUM(e.amount) FROM expenses e WHERE e.sheet_id = s.id), 0) AS expenses
+    FROM sheets s ORDER BY s.sheet_date DESC, s.id DESC
   `).all();
-  res.json(sheets.map((s) => ({ ...s, warnings: JSON.parse(s.validation_json || '[]').length })));
+  res.json(sheets.map((s) => ({
+    ...s,
+    warnings: JSON.parse(s.validation_json || '[]').length,
+    net_profit: s.meter_profit - s.expenses,
+  })));
 });
 
 // GET /api/sheets/:id

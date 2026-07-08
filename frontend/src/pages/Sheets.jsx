@@ -3,6 +3,8 @@ import { useNavigate } from 'react-router-dom';
 import { api, fmt, signedMoney } from '../api.js';
 import { useAuth } from '../AuthContext.jsx';
 
+const weekday = (iso) => new Date(`${iso}T00:00:00Z`).toLocaleDateString('en-US', { weekday: 'short', timeZone: 'UTC' });
+
 export default function Sheets() {
   const { isAdmin, authEnabled } = useAuth();
   const canModify = !authEnabled || isAdmin;
@@ -35,8 +37,9 @@ export default function Sheets() {
           <table>
             <thead>
               <tr>
-                <th>Date</th><th>Source</th><th>Total In</th><th>Total Out</th>
-                <th>Meter Profit/Loss</th><th>Cash Profit/Loss</th><th>Over/Short</th><th>Warnings</th><th>Status</th>
+                <th>Date</th><th>Day</th><th>Source</th><th>Total In</th><th>Total Out</th>
+                <th>Match</th><th>Expenses</th><th>Meter Profit</th><th>Net Profit (After Overhead)</th>
+                <th>Warnings</th><th>Status</th>
                 {canModify && <th></th>}
               </tr>
             </thead>
@@ -44,12 +47,14 @@ export default function Sheets() {
               {sheets.map((s) => (
                 <tr key={s.id} className="clickable" onClick={() => navigate(`/sheets/${s.id}`)}>
                   <td>{s.sheet_date}</td>
+                  <td>{weekday(s.sheet_date)}</td>
                   <td>{s.source}</td>
                   <td>${fmt(s.total_in)}</td>
                   <td>${fmt(s.total_out)}</td>
+                  <td>${fmt(s.match_amount)}</td>
+                  <td>${fmt(s.expenses)}</td>
                   <td className={s.meter_profit >= 0 ? 'pos' : 'neg'}>{signedMoney(s.meter_profit)}</td>
-                  <td className={s.cash_profit == null ? '' : s.cash_profit >= 0 ? 'pos' : 'neg'}>{signedMoney(s.cash_profit)}</td>
-                  <td className={s.over_short == null ? '' : s.over_short >= 0 ? 'pos' : 'neg'}>{signedMoney(s.over_short)}</td>
+                  <td className={s.net_profit >= 0 ? 'pos' : 'neg'}>{signedMoney(s.net_profit)}</td>
                   <td>{s.warnings > 0 ? <span className="badge review">{s.warnings}</span> : '—'}</td>
                   <td><span className={`badge ${s.status}`}>{s.status}</span></td>
                   {canModify && (
