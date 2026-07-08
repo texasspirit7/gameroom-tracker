@@ -36,7 +36,7 @@ export default function Sheets() {
             <thead>
               <tr>
                 <th>Date</th><th>Source</th><th>Total In</th><th>Total Out</th>
-                <th>Meter P/L</th><th>Cash P/L</th><th>Over/Short</th><th>Warnings</th><th>Status</th>
+                <th>Meter Profit/Loss</th><th>Cash Profit/Loss</th><th>Over/Short</th><th>Warnings</th><th>Status</th>
                 {canModify && <th></th>}
               </tr>
             </thead>

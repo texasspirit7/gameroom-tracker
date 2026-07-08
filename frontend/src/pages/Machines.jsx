@@ -77,7 +77,7 @@ export default function Machines() {
             <thead>
               <tr>
                 <th>#</th><th>Days</th><th>Active</th><th>Total In</th><th>Total Out</th>
-                <th>Net</th><th>Hold %</th><th>Avg In/Day</th><th>Max Payout</th><th>Flag</th>
+                <th>Net Profit</th><th>Hold %</th><th>Average Daily In</th><th>Maximum Payout</th><th>Flag</th>
               </tr>
             </thead>
             <tbody>

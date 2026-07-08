@@ -98,8 +98,8 @@ export default function SheetDetail() {
         <h2>Summary</h2>
         <div className="form-row">
           {[
-            ['total_in', 'Total In'], ['total_out', 'Total Out'], ['match_amount', 'Match'],
-            ['loan_rtn', 'Loan RTN'], ['start_bank', 'Start Bank'], ['end_bank', 'End Bank'],
+            ['total_in', 'Total In'], ['total_out', 'Total Out'], ['match_amount', 'Match Play'],
+            ['loan_rtn', 'Loan Return'], ['start_bank', 'Start Bank'], ['end_bank', 'End Bank'],
             ['cash_profit', 'Cash Profit'],
           ].map(([key, label]) => (
             <label key={key}>
@@ -123,8 +123,8 @@ export default function SheetDetail() {
         <table>
           <thead>
             <tr>
-              <th>#</th><th>Prev In</th><th>Curr In</th><th>Daily In</th>
-              <th>Prev Out</th><th>Curr Out</th><th>Daily Out</th><th>Net</th>
+              <th>#</th><th>Previous In</th><th>Current In</th><th>Daily In</th>
+              <th>Previous Out</th><th>Current Out</th><th>Daily Out</th><th>Net Profit</th>
             </tr>
           </thead>
           <tbody>

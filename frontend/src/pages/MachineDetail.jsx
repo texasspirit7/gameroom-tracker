@@ -56,7 +56,7 @@ export default function MachineDetail() {
         <div className="card"><div className="label">Total In</div><div className="value">${fmt(summary.total_in)}</div></div>
         <div className="card"><div className="label">Total Out</div><div className="value">${fmt(summary.total_out)}</div></div>
         <div className={`card ${summary.net >= 0 ? 'good' : 'bad'}`}>
-          <div className="label">Net</div>
+          <div className="label">Net Profit</div>
           <div className={`value ${summary.net >= 0 ? 'good' : 'bad'}`}>{signedMoney(summary.net)}</div>
         </div>
         <div className="card"><div className="label">Hold %</div><div className="value">{summary.hold_pct == null ? '—' : `${summary.hold_pct}%`}</div></div>
@@ -65,7 +65,7 @@ export default function MachineDetail() {
       </div>
 
       <div className="panel">
-        <h2>Daily in / out / net</h2>
+        <h2>Daily In / Out / Net Profit</h2>
         {series.length ? (
           <ResponsiveContainer width="100%" height={300}>
             <ComposedChart data={series}>
@@ -77,7 +77,7 @@ export default function MachineDetail() {
               <ReferenceLine y={0} stroke="#999" />
               <Bar dataKey="daily_in" name="In" fill="#0f6dd1" radius={[3, 3, 0, 0]} />
               <Bar dataKey="daily_out" name="Out" fill="#d98c8c" radius={[3, 3, 0, 0]} />
-              <Line type="monotone" dataKey="net" name="Net" stroke="#16803c" strokeWidth={2} dot={{ r: 3 }} />
+              <Line type="monotone" dataKey="net" name="Net Profit" stroke="#16803c" strokeWidth={2} dot={{ r: 3 }} />
             </ComposedChart>
           </ResponsiveContainer>
         ) : <p className="muted">No readings for this machine yet.</p>}
@@ -88,8 +88,8 @@ export default function MachineDetail() {
         <table>
           <thead>
             <tr>
-              <th>Sheet</th><th>Prev In</th><th>Curr In</th><th>Daily In</th>
-              <th>Prev Out</th><th>Curr Out</th><th>Daily Out</th><th>Net</th><th>Hold %</th>
+              <th>Sheet</th><th>Previous In</th><th>Current In</th><th>Daily In</th>
+              <th>Previous Out</th><th>Current Out</th><th>Daily Out</th><th>Net Profit</th><th>Hold %</th>
             </tr>
           </thead>
           <tbody>
