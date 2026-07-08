@@ -42,6 +42,8 @@ export default function Dashboard() {
       <div className="cards">
         <Card label="Total In" value={`$${fmt(totals.total_in)}`} delta={delta('total_in')} />
         <Card label="Total Out" value={`$${fmt(totals.total_out)}`} delta={delta('total_out')} invert />
+        <Card label="Match" value={`$${fmt(totals.match)}`} delta={delta('match')} invert />
+        <Card label="Expenses" value={`$${fmt(totals.expenses_total)}`} delta={delta('expenses_total')} invert />
         <Card label="Meter Profit" value={signedMoney(totals.meter_profit)} tone={totals.meter_profit >= 0 ? 'good' : 'bad'} delta={delta('meter_profit')} />
         <Card
           label="Net Profit (after overhead)"
@@ -123,10 +125,6 @@ export default function Dashboard() {
               </BarChart>
             </ResponsiveContainer>
           ) : <p className="muted">No expenses recorded in this range.</p>}
-          <p className="muted" style={{ fontSize: 12 }}>
-            Match play: ${fmt(totals.match)}
-            {otherExpensesTotal > 0 && <> · Other expenses: ${fmt(otherExpensesTotal)}</>}
-          </p>
           <p className="muted" style={{ fontSize: 12 }}>
             Sheet expenses (pay, food, supplies, etc.) are already subtracted in Meter Profit.
             {' '}<Link to="/other-expenses">Other Expenses</Link> (${fmt(otherExpensesTotal)}) are subtracted

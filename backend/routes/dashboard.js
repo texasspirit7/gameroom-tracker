@@ -84,6 +84,11 @@ function aggregate(from, to) {
   totals.sheet_count = sheets.length;
   totals.match = db.prepare('SELECT COALESCE(SUM(match_amount),0) AS m FROM sheets WHERE sheet_date BETWEEN ? AND ?').get(from, to).m;
   totals.other_expenses = db.prepare('SELECT COALESCE(SUM(amount),0) AS s FROM other_expenses WHERE expense_date BETWEEN ? AND ?').get(from, to).s;
+  totals.sheet_expenses = db.prepare(`
+    SELECT COALESCE(SUM(e.amount),0) AS s FROM expenses e JOIN sheets s ON s.id = e.sheet_id
+    WHERE s.sheet_date BETWEEN ? AND ?
+  `).get(from, to).s;
+  totals.expenses_total = totals.sheet_expenses + totals.other_expenses;
   totals.net_profit = totals.meter_profit - totals.other_expenses;
 
   return { sheets, totals };
