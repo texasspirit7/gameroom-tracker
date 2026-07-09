@@ -68,7 +68,8 @@ function persistSheet({ extracted, sheetDate, source, filePath, warnings }) {
     INSERT INTO machine_readings (sheet_id, machine_number, prev_in, curr_in, daily_in, prev_out, curr_out, daily_out)
     VALUES (?, ?, ?, ?, ?, ?, ?, ?)
   `);
-  for (const m of extracted.machines || []) {
+  const machineRows = Array.isArray(extracted.machines) ? extracted.machines : Object.values(extracted.machines || {});
+  for (const m of machineRows) {
     insReading.run(
       sheetId, Number(m.machine_number) || 0,
       Number(m.prev_in) || 0, Number(m.curr_in) || 0, Number(m.daily_in) || 0,

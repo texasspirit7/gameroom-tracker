@@ -8,7 +8,7 @@ const near = (a, b, tol = 1) => Math.abs((a ?? 0) - (b ?? 0)) <= tol;
  */
 export function validateSheet({ sheetDate, machines, totals, excludeSheetId }) {
   const warnings = [];
-  const rows = machines || [];
+  const rows = Array.isArray(machines) ? machines : Object.values(machines || {});
 
   const sumIn = rows.reduce((s, m) => s + (Number(m.daily_in) || 0), 0);
   const sumOut = rows.reduce((s, m) => s + (Number(m.daily_out) || 0), 0);
