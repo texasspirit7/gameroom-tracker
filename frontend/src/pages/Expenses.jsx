@@ -61,7 +61,7 @@ export default function Expenses() {
     <>
       <h1 className="page-title">Expenses</h1>
       <div className="page-sub">
-        Every expense in one place — pay, food, and supplies pulled automatically from daily sheets,
+        Every expense in one place — pay, family dollar, and supplies pulled automatically from daily sheets,
         plus recurring overhead (rent, electricity, etc.) you log here yourself.
       </div>
 

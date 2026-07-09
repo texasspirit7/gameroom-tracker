@@ -121,3 +121,7 @@ db.exec(`
   CREATE INDEX IF NOT EXISTS idx_readings_machine ON machine_readings(machine_number);
   CREATE INDEX IF NOT EXISTS idx_other_expenses_date ON other_expenses(expense_date);
 `);
+
+// One-time data fix: the sheet's "FD" row (Family Dollar store) was previously
+// mislabeled as category "food" — relabel any already-stored rows.
+db.exec("UPDATE expenses SET category = 'family dollar' WHERE category = 'food'");

@@ -6,7 +6,7 @@ export const expensesRouter = Router();
 
 const DATE_RE = /^\d{4}-\d{2}-\d{2}$/;
 
-// GET /api/expenses?from&to — combined view: sheet-derived expenses (pay, food,
+// GET /api/expenses?from&to — combined view: sheet-derived expenses (pay, family dollar,
 // cleaning, etc. from uploaded sheets) + manually logged ones (rent, electricity, etc.)
 expensesRouter.get('/', (req, res) => {
   const from = DATE_RE.test(req.query.from) ? req.query.from : '0001-01-01';

@@ -1,9 +1,10 @@
 import xlsx from 'xlsx';
 
 const EXPENSE_LABELS = [
-  'pay', 'food', 'coke', 'grass', 'cleaning', 'sams', 'walmart', 'misc expense',
+  'pay', 'fd', 'coke', 'grass', 'cleaning', 'sams', 'walmart', 'misc expense',
   'loan', 'rent', 'bonus', 'drawing', 'credit', 'referral',
 ];
+const LABEL_TO_CATEGORY = { 'misc expense': 'misc', fd: 'family dollar' };
 
 const num = (v) => {
   if (v == null || v === '') return 0;
@@ -83,7 +84,7 @@ export function extractFromXlsx(buffer) {
   const expenses = [];
   for (const label of EXPENSE_LABELS) {
     const v = labelValue(label);
-    if (v) expenses.push({ category: label === 'misc expense' ? 'misc' : label, amount: v });
+    if (v) expenses.push({ category: LABEL_TO_CATEGORY[label] || label, amount: v });
   }
   // "name" rows under Pay hold payroll amounts
   const payFromNames = (() => {

@@ -43,7 +43,7 @@ const SHEET_TOOL = {
       expenses: {
         type: 'array',
         description:
-          'Non-empty expense rows: pay ("name" rows under Pay), food, coke, grass, cleaning, sams, walmart, misc, loan, rent, bonus, drawing, credit, referral',
+          'Non-empty expense rows: pay ("name" rows under Pay), "FD" row (label category as "family dollar", NOT "food"), coke, grass, cleaning, sams, walmart, misc, loan, rent, bonus, drawing, credit, referral',
         items: {
           type: 'object',
           required: ['category', 'amount'],
