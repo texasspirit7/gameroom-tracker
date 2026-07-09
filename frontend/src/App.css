@@ -83,6 +83,9 @@ th:first-child, td:first-child { text-align: left; }
 tr:hover td { background: #f7f9fd; }
 tr.clickable { cursor: pointer; }
 
+.attachment-link { text-decoration: none; font-size: 15px; opacity: 0.75; }
+.attachment-link:hover { opacity: 1; }
+
 .badge { display: inline-block; padding: 2px 8px; border-radius: 999px; font-size: 11px; font-weight: 600; }
 .badge.dead { background: #eceff4; color: #7a8496; }
 .badge.bleeding { background: #fde8e8; color: var(--bad); }

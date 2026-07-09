@@ -37,7 +37,7 @@ export default function Sheets() {
           <table>
             <thead>
               <tr>
-                <th>Date</th><th>Day</th><th>Source</th><th>Total In</th><th>Total Out</th>
+                <th>Date</th><th>Day</th><th></th><th>Source</th><th>Total In</th><th>Total Out</th>
                 <th>Match</th><th>Expenses</th><th>Meter Profit</th><th>Net Profit (After Overhead)</th>
                 <th>Warnings</th><th>Status</th>
                 {canModify && <th></th>}
@@ -48,6 +48,18 @@ export default function Sheets() {
                 <tr key={s.id} className="clickable" onClick={() => navigate(`/sheets/${s.id}`)}>
                   <td>{s.sheet_date}</td>
                   <td>{weekday(s.sheet_date)}</td>
+                  <td>
+                    {s.has_file && (
+                      <a
+                        href={`/api/sheets/${s.id}/file`}
+                        title="Download uploaded sheet"
+                        className="attachment-link"
+                        onClick={(e) => e.stopPropagation()}
+                      >
+                        📎
+                      </a>
+                    )}
+                  </td>
                   <td>{s.source}</td>
                   <td>${fmt(s.total_in)}</td>
                   <td>${fmt(s.total_out)}</td>

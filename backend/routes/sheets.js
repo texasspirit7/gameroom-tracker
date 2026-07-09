@@ -132,14 +132,25 @@ sheetsRouter.get('/', (req, res) => {
   const sheets = db.prepare(`
     SELECT s.id, s.sheet_date, s.source, s.total_in, s.total_out, s.match_amount,
            s.meter_profit, s.cash_profit, s.over_short, s.status, s.validation_json, s.created_at,
+           (s.file_path IS NOT NULL) AS has_file,
            COALESCE((SELECT SUM(e.amount) FROM expenses e WHERE e.sheet_id = s.id), 0) AS expenses
     FROM sheets s ORDER BY s.sheet_date DESC, s.id DESC
   `).all();
   res.json(sheets.map((s) => ({
     ...s,
+    has_file: Boolean(s.has_file),
     warnings: JSON.parse(s.validation_json || '[]').length,
     net_profit: s.meter_profit - s.expenses,
   })));
+});
+
+// GET /api/sheets/:id/file — download the originally uploaded image/pdf/xlsx
+sheetsRouter.get('/:id/file', (req, res) => {
+  const sheet = db.prepare('SELECT sheet_date, file_path FROM sheets WHERE id = ?').get(Number(req.params.id));
+  if (!sheet?.file_path) return res.status(404).json({ error: 'No file on record for this sheet' });
+  const abs = path.join(config.dataDir, sheet.file_path);
+  if (!fs.existsSync(abs)) return res.status(404).json({ error: 'File missing from storage' });
+  res.download(abs, `sheet-${sheet.sheet_date}${path.extname(sheet.file_path)}`);
 });
 
 // GET /api/sheets/:id
