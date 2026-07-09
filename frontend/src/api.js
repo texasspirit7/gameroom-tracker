@@ -46,6 +46,10 @@ export const api = {
   approveUser: (id) => request(`/api/admin/users/${id}/approve`, { method: 'POST' }),
   blockUser: (id) => request(`/api/admin/users/${id}/block`, { method: 'POST' }),
   setUserRole: (id, role) => request(`/api/admin/users/${id}/role`, { method: 'POST', body: JSON.stringify({ role }) }),
+
+  profitSplit: () => request('/api/profit-split'),
+  setProfitSplitPaid: (month, paid) =>
+    request(`/api/profit-split/${month}`, { method: 'PATCH', body: JSON.stringify({ paid }) }),
 };
 
 export const fmt = (n, opts = {}) =>

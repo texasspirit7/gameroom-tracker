@@ -14,6 +14,7 @@ import Machines from './pages/Machines.jsx';
 import MachineDetail from './pages/MachineDetail.jsx';
 import Expenses from './pages/Expenses.jsx';
 import AdminUsers from './pages/AdminUsers.jsx';
+import ProfitSplit from './pages/ProfitSplit.jsx';
 
 const NAV = [
   { to: '/', label: 'Dashboard', icon: '📊', end: true },
@@ -22,6 +23,7 @@ const NAV = [
   { to: '/machines', label: 'Machines', icon: '🎰' },
   { to: '/expenses', label: 'Expenses', icon: '🧾' },
   { to: '/admin', label: 'Admin — Users', icon: '🛡️' },
+  { to: '/profit-split', label: 'Profit Split', icon: '🤝', adminOnly: true },
 ];
 
 // The date range picker only affects data on these routes
@@ -53,6 +55,8 @@ function SidebarFooter() {
 function AppShell() {
   const [navOpen, setNavOpen] = useState(false);
   const { pathname } = useLocation();
+  const { isAdmin, authEnabled } = useAuth();
+  const showAdminOnly = !authEnabled || isAdmin;
 
   // Close the mobile drawer whenever the route changes
   useEffect(() => { setNavOpen(false); }, [pathname]);
@@ -80,7 +84,7 @@ function AppShell() {
           <button className="sidebar-close" aria-label="Close menu" onClick={() => setNavOpen(false)}>✕</button>
         </div>
         <nav>
-          {NAV.map((item) => (
+          {NAV.filter((item) => !item.adminOnly || showAdminOnly).map((item) => (
             <NavLink key={item.to} to={item.to} end={item.end}>
               <span className="nav-icon">{item.icon}</span>
               {item.label}
@@ -101,6 +105,7 @@ function AppShell() {
           <Route path="/machines/:number" element={<MachineDetail />} />
           <Route path="/expenses" element={<Expenses />} />
           <Route path="/admin" element={<AdminUsers />} />
+          <Route path="/profit-split" element={<ProfitSplit />} />
         </Routes>
       </main>
     </div>

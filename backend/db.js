@@ -108,6 +108,14 @@ db.exec(`
     created_at TEXT NOT NULL DEFAULT (datetime('now'))
   );
 
+  -- Tracks whether the monthly 40/60 net-profit split has been paid out
+  CREATE TABLE IF NOT EXISTS profit_splits (
+    month TEXT PRIMARY KEY,                         -- YYYY-MM
+    paid INTEGER NOT NULL DEFAULT 0,
+    paid_at TEXT,
+    paid_by TEXT
+  );
+
   CREATE INDEX IF NOT EXISTS idx_sheets_date ON sheets(sheet_date);
   CREATE INDEX IF NOT EXISTS idx_readings_sheet ON machine_readings(sheet_id);
   CREATE INDEX IF NOT EXISTS idx_readings_machine ON machine_readings(machine_number);

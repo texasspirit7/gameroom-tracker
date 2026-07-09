@@ -8,6 +8,7 @@ import { db } from './db.js';
 import { sheetsRouter } from './routes/sheets.js';
 import { dashboardRouter, machinesRouter } from './routes/dashboard.js';
 import { expensesRouter } from './routes/expenses.js';
+import { profitSplitRouter } from './routes/profitSplit.js';
 import { authRouter, adminRouter } from './routes/auth.js';
 import { requireAuth, requireApproved } from './auth.js';
 
@@ -42,6 +43,7 @@ app.use('/api/sheets', sheetsRouter);
 app.use('/api/dashboard', dashboardRouter);
 app.use('/api/machines', machinesRouter);
 app.use('/api/expenses', expensesRouter);
+app.use('/api/profit-split', profitSplitRouter);
 
 // Serve built frontend when it exists (production / local single-server mode)
 const dist = path.join(__dirname, '..', 'frontend', 'dist');
