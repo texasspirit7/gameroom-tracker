@@ -12,6 +12,7 @@ export default function Upload() {
   const [file, setFile] = useState(null);
   const [sheetDate, setSheetDate] = useState(todayISO());
   const [busy, setBusy] = useState(false);
+  const [done, setDone] = useState(false);
   const [error, setError] = useState(null);
   const [drag, setDrag] = useState(false);
   const inputRef = useRef(null);
@@ -25,19 +26,30 @@ export default function Upload() {
   const submit = async () => {
     if (!file) return;
     setBusy(true);
+    setDone(false);
     setError(null);
     try {
       const result = await api.uploadSheet(file, sheetDate);
-      navigate(`/sheets/${result.sheetId}`);
-    } catch (e) {
-      setError(e.message);
-    } finally {
       setBusy(false);
+      setDone(true);
+      setTimeout(() => navigate(`/sheets/${result.sheetId}`), 1400);
+    } catch (e) {
+      setBusy(false);
+      setError(e.message);
     }
   };
 
   return (
     <>
+      {busy && (
+        <div className="top-progress" role="progressbar" aria-label="Processing upload">
+          <div className="top-progress-bar" />
+        </div>
+      )}
+      {done && (
+        <div className="upload-toast">✅ Processing complete — opening sheet…</div>
+      )}
+
       <h1 className="page-title">Upload Daily Sheet</h1>
       <div className="page-sub">
         Excel (.xlsx) is read directly. Photos (.jpg/.png) are read with AI — always review before verifying.
