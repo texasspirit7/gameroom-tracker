@@ -9,7 +9,8 @@
     "dev:frontend": "npm run dev --prefix frontend",
     "build": "npm run build --prefix frontend",
     "seed": "node backend/seed.js",
-    "start": "node backend/server.js"
+    "start": "node backend/server.js",
+    "test": "node --test backend/tests/*.test.js"
   },
   "engines": {
     "node": ">=22"

@@ -72,6 +72,13 @@ export function mediaTypeForExt(ext) {
   return MEDIA_TYPES[ext.toLowerCase()] || null;
 }
 
+// The model occasionally returns `machines` as an object (e.g. keyed by row
+// index) instead of a true array — never trust the shape of external/LLM
+// output, coerce it here so nothing downstream has to guess.
+export function normalizeMachines(machines) {
+  return Array.isArray(machines) ? machines : Object.values(machines || {});
+}
+
 /** Extract sheet data from a photo/screenshot using Claude vision with forced tool_use. */
 export async function extractFromImage(buffer, mediaType) {
   if (!config.anthropicApiKey) {
@@ -113,13 +120,8 @@ export async function extractFromImage(buffer, mediaType) {
   if (!toolUse) throw new Error('Extraction failed — model returned no structured data');
   const data = toolUse.input;
 
-  // The model occasionally returns `machines` as an object (e.g. keyed by row
-  // index) instead of a true array — never trust the shape of external/LLM
-  // output, coerce it here so nothing downstream has to guess.
-  const machines = Array.isArray(data.machines) ? data.machines : Object.values(data.machines || {});
-
   return {
-    machines,
+    machines: normalizeMachines(data.machines),
     totals: data.totals || {},
     settlement: {
       match_amount: data.settlement?.match_amount || 0,

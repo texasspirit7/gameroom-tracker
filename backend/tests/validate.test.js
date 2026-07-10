@@ -1,0 +1,82 @@
+import { after, describe, test } from 'node:test';
+import assert from 'node:assert/strict';
+import fs from 'node:fs';
+import os from 'node:os';
+import path from 'node:path';
+
+// validate.js/claudeExtract.js transitively import db.js, which opens a real
+// SQLite file at config.dataDir on module load — point it at a throwaway temp
+// dir first so these "pure" unit tests never touch the real dev database.
+const tempDir = fs.mkdtempSync(path.join(os.tmpdir(), 'gameroom-unit-test-'));
+process.env.DATA_DIR = tempDir;
+process.env.JWT_SECRET = 'test-only-secret';
+
+const { validateSheet, computeMeterProfit } = await import('../extract/validate.js');
+const { normalizeMachines } = await import('../extract/claudeExtract.js');
+const { db } = await import('../db.js');
+
+after(() => {
+  db.close();
+  fs.rmSync(tempDir, { recursive: true, force: true });
+});
+
+describe('normalizeMachines (regression: production "rows.reduce is not a function" crash)', () => {
+  test('object-shaped machines (keyed by index) is coerced to an array', () => {
+    const objShaped = { 0: { machine_number: 1 }, 1: { machine_number: 2 } };
+    const result = normalizeMachines(objShaped);
+    assert.equal(Array.isArray(result), true);
+    assert.equal(result.length, 2);
+  });
+
+  test('array input passes through unchanged', () => {
+    const arr = [{ machine_number: 1 }];
+    assert.deepEqual(normalizeMachines(arr), arr);
+  });
+
+  test('null/undefined becomes an empty array', () => {
+    assert.deepEqual(normalizeMachines(null), []);
+    assert.deepEqual(normalizeMachines(undefined), []);
+  });
+});
+
+describe('validateSheet (regression: must not crash on malformed machines shape)', () => {
+  test('object-shaped machines does not throw, and totals still cross-check', () => {
+    const objShaped = {
+      0: { machine_number: 1, daily_in: 100, daily_out: 50, curr_in: 100, prev_in: 0, curr_out: 50, prev_out: 0 },
+      1: { machine_number: 2, daily_in: 200, daily_out: 75, curr_in: 200, prev_in: 0, curr_out: 75, prev_out: 0 },
+    };
+    assert.doesNotThrow(() => {
+      const { warnings } = validateSheet({ sheetDate: null, machines: objShaped, totals: { total_in: 300, total_out: 125 } });
+      assert.equal(warnings.length, 0, 'sums match totals, no warnings expected');
+    });
+  });
+
+  test('flags a mismatch between machine daily_in sum and the sheet total_in', () => {
+    const machines = [{ machine_number: 1, daily_in: 100, daily_out: 0 }];
+    const { warnings } = validateSheet({ sheetDate: null, machines, totals: { total_in: 999, total_out: 0 } });
+    assert.ok(warnings.some((w) => w.includes('Daily In sums to')));
+  });
+});
+
+describe('computeMeterProfit — (Total In + Loan RTN) − (Total Out + Match), no expenses subtracted', () => {
+  test('basic case', () => {
+    const mp = computeMeterProfit({
+      totals: { total_in: 300, total_out: 125 },
+      settlement: { match_amount: 0, loan_rtn: 0 },
+    });
+    assert.equal(mp, 175);
+  });
+
+  test('includes loan_rtn and subtracts match_amount', () => {
+    const mp = computeMeterProfit({
+      totals: { total_in: 2421, total_out: 1600 },
+      settlement: { match_amount: 435, loan_rtn: 0 },
+    });
+    assert.equal(mp, 386);
+  });
+
+  test('missing/null fields default to 0 rather than throwing or producing NaN', () => {
+    const mp = computeMeterProfit({ totals: {}, settlement: {} });
+    assert.equal(mp, 0);
+  });
+});

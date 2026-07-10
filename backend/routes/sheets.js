@@ -5,7 +5,7 @@ import path from 'node:path';
 import { db } from '../db.js';
 import { config } from '../config.js';
 import { extractFromXlsx } from '../extract/xlsxExtract.js';
-import { extractFromImage, mediaTypeForExt } from '../extract/claudeExtract.js';
+import { extractFromImage, mediaTypeForExt, normalizeMachines } from '../extract/claudeExtract.js';
 import { validateSheet, computeMeterProfit } from '../extract/validate.js';
 import { adminGate } from '../auth.js';
 
@@ -74,7 +74,7 @@ function persistSheet({ extracted, sheetDate, source, filePath, warnings }) {
       prev_in=excluded.prev_in, curr_in=excluded.curr_in, daily_in=excluded.daily_in,
       prev_out=excluded.prev_out, curr_out=excluded.curr_out, daily_out=excluded.daily_out
   `);
-  const machineRows = Array.isArray(extracted.machines) ? extracted.machines : Object.values(extracted.machines || {});
+  const machineRows = normalizeMachines(extracted.machines);
   for (const m of machineRows) {
     insReading.run(
       sheetId, Number(m.machine_number) || 0,
