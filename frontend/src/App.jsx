@@ -1,7 +1,8 @@
 import { useEffect, useState } from 'react';
-import { NavLink, Route, Routes, useLocation } from 'react-router-dom';
+import { NavLink, Route, Routes, useLocation, useNavigate } from 'react-router-dom';
 import { DateRangeProvider } from './DateRangeContext.jsx';
 import { AuthProvider, useAuth } from './AuthContext.jsx';
+import { UploadProvider, useUpload } from './UploadContext.jsx';
 import DateRangePicker from './components/DateRangePicker.jsx';
 import LoginGate from './components/LoginGate.jsx';
 import StringLights from './components/StringLights.jsx';
@@ -37,6 +38,40 @@ function Topbar() {
       <DateRangePicker />
     </div>
   );
+}
+
+function UploadBanner() {
+  const { isUploading, readySheetId, uploadError, clear } = useUpload();
+  const navigate = useNavigate();
+
+  if (isUploading) {
+    return (
+      <div className="upload-banner upload-banner--loading">
+        <span className="upload-banner-spinner" />
+        <span>Processing sheet…</span>
+      </div>
+    );
+  }
+  if (uploadError) {
+    return (
+      <div className="upload-banner upload-banner--error">
+        <span>⚠ {uploadError}</span>
+        <button className="upload-banner-close" onClick={clear}>✕</button>
+      </div>
+    );
+  }
+  if (readySheetId) {
+    return (
+      <div className="upload-banner upload-banner--ready">
+        <span>Sheet ready</span>
+        <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
+          <button className="upload-banner-review" onClick={() => navigate(`/sheets/${readySheetId}`)}>Review →</button>
+          <button className="upload-banner-close" onClick={clear}>✕</button>
+        </div>
+      </div>
+    );
+  }
+  return null;
 }
 
 function SidebarFooter() {
@@ -91,6 +126,7 @@ function AppShell() {
             </NavLink>
           ))}
         </nav>
+        <UploadBanner />
         <SidebarFooter />
       </aside>
       <main className="content">
@@ -116,10 +152,12 @@ export default function App() {
   return (
     <AuthProvider>
       <DateRangeProvider>
-        <StringLights />
-        <LoginGate>
-          <AppShell />
-        </LoginGate>
+        <UploadProvider>
+          <StringLights />
+          <LoginGate>
+            <AppShell />
+          </LoginGate>
+        </UploadProvider>
       </DateRangeProvider>
     </AuthProvider>
   );

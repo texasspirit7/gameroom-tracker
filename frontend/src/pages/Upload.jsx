@@ -1,6 +1,5 @@
 import { useRef, useState } from 'react';
-import { useNavigate } from 'react-router-dom';
-import { api } from '../api.js';
+import { useUpload } from '../UploadContext.jsx';
 
 function todayISO() {
   const d = new Date();
@@ -11,45 +10,24 @@ function todayISO() {
 export default function Upload() {
   const [file, setFile] = useState(null);
   const [sheetDate, setSheetDate] = useState(todayISO());
-  const [busy, setBusy] = useState(false);
-  const [done, setDone] = useState(false);
-  const [error, setError] = useState(null);
+  const [fileError, setFileError] = useState(null);
   const [drag, setDrag] = useState(false);
   const inputRef = useRef(null);
-  const navigate = useNavigate();
+  const { isUploading, startUpload } = useUpload();
 
   const pick = (f) => {
     setFile(f || null);
-    setError(null);
+    setFileError(null);
   };
 
-  const submit = async () => {
+  const submit = () => {
     if (!file) return;
-    setBusy(true);
-    setDone(false);
-    setError(null);
-    try {
-      const result = await api.uploadSheet(file, sheetDate);
-      setBusy(false);
-      setDone(true);
-      setTimeout(() => navigate(`/sheets/${result.sheetId}`), 1400);
-    } catch (e) {
-      setBusy(false);
-      setError(e.message);
-    }
+    startUpload(file, sheetDate);
+    setFile(null);
   };
 
   return (
     <>
-      {busy && (
-        <div className="top-progress" role="progressbar" aria-label="Processing upload">
-          <div className="top-progress-bar" />
-        </div>
-      )}
-      {done && (
-        <div className="upload-toast">✅ Processing complete — opening sheet…</div>
-      )}
-
       <h1 className="page-title">Upload Daily Sheet</h1>
       <div className="page-sub">
         Excel (.xlsx) is read directly. Photos (.jpg/.png) are read with AI — always review before verifying.
@@ -58,33 +36,43 @@ export default function Upload() {
       </div>
 
       <div className="panel">
-        <div
-          className={`dropzone ${drag ? 'drag' : ''}`}
-          onClick={() => inputRef.current?.click()}
-          onDragOver={(e) => { e.preventDefault(); setDrag(true); }}
-          onDragLeave={() => setDrag(false)}
-          onDrop={(e) => { e.preventDefault(); setDrag(false); pick(e.dataTransfer.files?.[0]); }}
-        >
-          <div className="big">📄</div>
-          {file ? <strong>{file.name}</strong> : <>Drop the daily sheet here, or click to browse<br /><span style={{ fontSize: 12 }}>.xlsx · .jpg · .png · .webp</span></>}
-          <input
-            ref={inputRef} type="file" hidden
-            accept=".xlsx,.xlsm,.xls,.jpg,.jpeg,.png,.webp"
-            onChange={(e) => pick(e.target.files?.[0])}
-          />
-        </div>
+        {isUploading ? (
+          <div className="upload-loading-card">
+            <span className="spinner" style={{ width: 22, height: 22, borderWidth: 3 }} />
+            <p style={{ fontWeight: 700, margin: '10px 0 2px' }}>Processing sheet…</p>
+            <p className="muted" style={{ fontSize: 12, margin: 0 }}>
+              This runs in the background — feel free to navigate away. Watch the sidebar for when it's ready.
+            </p>
+          </div>
+        ) : (
+          <>
+            <div
+              className={`dropzone ${drag ? 'drag' : ''}`}
+              onClick={() => inputRef.current?.click()}
+              onDragOver={(e) => { e.preventDefault(); setDrag(true); }}
+              onDragLeave={() => setDrag(false)}
+              onDrop={(e) => { e.preventDefault(); setDrag(false); pick(e.dataTransfer.files?.[0]); }}
+            >
+              <div className="big">📄</div>
+              {file ? <strong>{file.name}</strong> : <>Drop the daily sheet here, or click to browse<br /><span style={{ fontSize: 12 }}>.xlsx · .jpg · .png · .webp</span></>}
+              <input
+                ref={inputRef} type="file" hidden
+                accept=".xlsx,.xlsm,.xls,.jpg,.jpeg,.png,.webp"
+                onChange={(e) => pick(e.target.files?.[0])}
+              />
+            </div>
 
-        <div className="form-row" style={{ marginTop: 16 }}>
-          <label>
-            Sheet date
-            <input type="date" value={sheetDate} onChange={(e) => setSheetDate(e.target.value)} />
-          </label>
-          <button onClick={submit} disabled={!file || busy || !sheetDate}>
-            {busy ? <><span className="spinner" />Extracting…</> : 'Upload & Extract'}
-          </button>
-        </div>
+            <div className="form-row" style={{ marginTop: 16 }}>
+              <label>
+                Sheet date
+                <input type="date" value={sheetDate} onChange={(e) => setSheetDate(e.target.value)} />
+              </label>
+              <button onClick={submit} disabled={!file || !sheetDate}>Upload & Extract</button>
+            </div>
 
-        {error && <div className="error-box">{error}</div>}
+            {fileError && <div className="error-box">{fileError}</div>}
+          </>
+        )}
       </div>
     </>
   );
