@@ -64,9 +64,15 @@ function persistSheet({ extracted, sheetDate, source, filePath, warnings }) {
   );
   const sheetId = result.lastInsertRowid;
 
+  // Upsert, not plain insert — the extraction (esp. Claude vision on a messy
+  // photo) can occasionally report the same machine_number twice; last one
+  // wins rather than crashing the whole upload on the UNIQUE constraint.
   const insReading = db.prepare(`
     INSERT INTO machine_readings (sheet_id, machine_number, prev_in, curr_in, daily_in, prev_out, curr_out, daily_out)
     VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+    ON CONFLICT(sheet_id, machine_number) DO UPDATE SET
+      prev_in=excluded.prev_in, curr_in=excluded.curr_in, daily_in=excluded.daily_in,
+      prev_out=excluded.prev_out, curr_out=excluded.curr_out, daily_out=excluded.daily_out
   `);
   const machineRows = Array.isArray(extracted.machines) ? extracted.machines : Object.values(extracted.machines || {});
   for (const m of machineRows) {
