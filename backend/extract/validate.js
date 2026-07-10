@@ -14,6 +14,20 @@ export function validateSheet({ sheetDate, machines, totals, excludeSheetId }) {
   const sumIn = rows.reduce((s, m) => s + (Number(m.daily_in) || 0), 0);
   const sumOut = rows.reduce((s, m) => s + (Number(m.daily_out) || 0), 0);
 
+  // Distinct from a normal per-machine misread: if almost no machine rows came
+  // back at all (extraction gave up on the table) while the sheet's own totals
+  // show real activity, that's not a reconciliation mismatch to eyeball — the
+  // machine data for this upload is effectively missing and should be redone.
+  const totalActivity = (Number(totals?.total_in) || 0) + (Number(totals?.total_out) || 0);
+  if (rows.length <= 1 && totalActivity > 0) {
+    warnings.unshift(
+      `Machine table extraction likely failed — only ${rows.length} machine row${rows.length === 1 ? '' : 's'} ` +
+      `came back, but the sheet shows real activity ($${Number(totals.total_in || 0).toLocaleString()} in / ` +
+      `$${Number(totals.total_out || 0).toLocaleString()} out). Delete this sheet and re-upload the same file — ` +
+      `extraction is non-deterministic and a retry usually reads the table correctly.`
+    );
+  }
+
   if (totals?.total_in != null && !near(sumIn, totals.total_in)) {
     warnings.push(
       `Machine Daily In sums to ${sumIn.toLocaleString()} but sheet Total In is ${Number(totals.total_in).toLocaleString()}`

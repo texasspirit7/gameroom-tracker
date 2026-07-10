@@ -58,6 +58,33 @@ describe('validateSheet (regression: must not crash on malformed machines shape)
   });
 });
 
+describe('validateSheet (regression: near-empty machine table extraction must be called out clearly)', () => {
+  test('a single all-zero placeholder row with real sheet totals gets an explicit "extraction likely failed" warning', () => {
+    // Mirrors a real production case: Claude vision read the sheet totals/expenses
+    // correctly but returned only one degenerate machine row instead of the full table.
+    const machines = [{ machine_number: 0, prev_in: 0, curr_in: 0, daily_in: 0, prev_out: 0, curr_out: 0, daily_out: 0 }];
+    const { warnings } = validateSheet({ sheetDate: null, machines, totals: { total_in: 4698, total_out: 1448 } });
+    assert.ok(
+      warnings[0].includes('Machine table extraction likely failed'),
+      'the extraction-failed warning must be present and come first'
+    );
+  });
+
+  test('does not fire when there is no real activity to miss (empty sheet, all zero totals)', () => {
+    const { warnings } = validateSheet({ sheetDate: null, machines: [], totals: { total_in: 0, total_out: 0 } });
+    assert.ok(!warnings.some((w) => w.includes('extraction likely failed')));
+  });
+
+  test('does not fire for a normal, fully-populated machine table', () => {
+    const machines = [
+      { machine_number: 1, daily_in: 100, daily_out: 50 },
+      { machine_number: 2, daily_in: 200, daily_out: 75 },
+    ];
+    const { warnings } = validateSheet({ sheetDate: null, machines, totals: { total_in: 300, total_out: 125 } });
+    assert.ok(!warnings.some((w) => w.includes('extraction likely failed')));
+  });
+});
+
 describe('computeMeterProfit — (Total In + Loan RTN) − (Total Out + Match), no expenses subtracted', () => {
   test('basic case', () => {
     const mp = computeMeterProfit({
