@@ -104,7 +104,7 @@ sheetsRouter.post('/upload', upload.single('file'), async (req, res) => {
 
     const extracted = isXlsx
       ? extractFromXlsx(req.file.buffer)
-      : await extractFromImage(req.file.buffer, mediaType);
+      : await extractFromImage(req.file.buffer);
 
     // Defaults to today (the upload day) but can be overridden — e.g. backfilling a previous day.
     // Never read from the file itself.

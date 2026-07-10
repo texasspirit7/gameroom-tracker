@@ -1,5 +1,6 @@
 import Anthropic from '@anthropic-ai/sdk';
 import { config } from '../config.js';
+import { preprocessImageForVision } from './imagePreprocess.js';
 
 const SHEET_TOOL = {
   name: 'record_daily_sheet',
@@ -80,10 +81,13 @@ export function normalizeMachines(machines) {
 }
 
 /** Extract sheet data from a photo/screenshot using Claude vision with forced tool_use. */
-export async function extractFromImage(buffer, mediaType) {
+export async function extractFromImage(buffer) {
   if (!config.anthropicApiKey) {
     throw new Error('ANTHROPIC_API_KEY is not configured — image extraction unavailable. Upload the .xlsx file instead.');
   }
+  // Downscale (if oversized)/sharpen/normalize ourselves before Claude ever
+  // sees it — see imagePreprocess.js for why this matters for dense tables.
+  const prepared = await preprocessImageForVision(buffer);
   const client = new Anthropic({ apiKey: config.anthropicApiKey });
   const response = await client.messages.create({
     model: config.claudeModel,
@@ -96,7 +100,7 @@ export async function extractFromImage(buffer, mediaType) {
         content: [
           {
             type: 'image',
-            source: { type: 'base64', media_type: mediaType, data: buffer.toString('base64') },
+            source: { type: 'base64', media_type: prepared.mediaType, data: prepared.buffer.toString('base64') },
           },
           {
             type: 'text',
