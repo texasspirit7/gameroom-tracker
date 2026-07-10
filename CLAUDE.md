@@ -29,12 +29,29 @@ Every test in this suite exists because something broke in production first:
 
 1. `npm test` — must pass.
 2. Commit + push to `main` → GitHub Actions (`.github/workflows/deploy.yml`) builds + deploys via OIDC.
-3. `az webapp restart --resource-group gameroom-rg --name la-pryor` — first-boot health polling after deploy
-   has been flaky before; a restart + manual health check is the reliable way to confirm.
-4. `curl https://la-pryor.azurewebsites.net/api/health` → expect `{"ok":true,...}`.
-5. For frontend changes, also verify the actual deployed bundle contains the change
+3. `curl https://la-pryor.azurewebsites.net/api/health` → expect `{"ok":true,...}`. Azure auto-recycles the
+   container on deploy — do **not** also run `az webapp restart` unless health actually fails. Restarting after
+   every deploy just stacks extra 30-130s downtime windows on top of each other (this happened — multiple
+   restarts in quick succession while the user was actively on the site caused a real "everything is broken"
+   incident that had nothing to do with the code). Only restart if `/api/health` is genuinely unhealthy.
+4. For frontend changes, also verify the actual deployed bundle contains the change
    (`curl` the `/assets/index-*.js` referenced by the homepage and `grep` for a distinctive string) —
    a green deploy + healthy server does not by itself prove the feature is live.
+
+## Rollback
+
+`stable-2026-07-10` is a tagged known-good checkpoint (regression suite + every bug fix through the
+sharp-based image-preprocessing fix, confirmed working end-to-end in production). If a future change breaks
+something and the cause isn't obvious:
+
+```bash
+git checkout stable-2026-07-10 -- .
+git commit -m "revert: roll back to stable-2026-07-10"
+git push origin main   # normal deploy pipeline redeploys it
+```
+
+Tag a new checkpoint the same way (`git tag -a stable-YYYY-MM-DD -m "..."`) after any future change that's
+been confirmed stable in production, so this stays a moving safety net rather than a stale one-off.
 
 ## Local dev
 
