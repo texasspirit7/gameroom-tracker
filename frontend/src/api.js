@@ -50,6 +50,19 @@ export const api = {
   profitSplit: () => request('/api/profit-split'),
   setProfitSplitPaid: (month, paid) =>
     request(`/api/profit-split/${month}`, { method: 'PATCH', body: JSON.stringify({ paid }) }),
+
+  analyticsByWeekday: () => request('/api/analytics/weekday'),
+  analyticsByWeekdayMachines: (day) => request(`/api/analytics/weekday/${day}/machines`),
+  analyticsByWeek: () => request('/api/analytics/week'),
+  analyticsByWeekMachines: (weekStart) => request(`/api/analytics/week/${weekStart}/machines`),
+  analyticsByMonth: () => request('/api/analytics/month'),
+  analyticsByMonthMachines: (month) => request(`/api/analytics/month/${month}/machines`),
+  analyticsByDayOfMonth: () => request('/api/analytics/day-of-month'),
+  analyticsByDayOfMonthMachines: (day) => request(`/api/analytics/day-of-month/${day}/machines`),
+  analyticsByPayPeriod: () => request('/api/analytics/pay-period'),
+  analyticsByPayPeriodMachines: (period) => request(`/api/analytics/pay-period/${period}/machines`),
+  analyticsLeaderboard: () => request('/api/analytics/leaderboard'),
+  analyticsTrend: () => request('/api/analytics/trend'),
 };
 
 export const fmt = (n, opts = {}) =>

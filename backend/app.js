@@ -8,6 +8,7 @@ import { sheetsRouter } from './routes/sheets.js';
 import { dashboardRouter, machinesRouter } from './routes/dashboard.js';
 import { expensesRouter } from './routes/expenses.js';
 import { profitSplitRouter } from './routes/profitSplit.js';
+import { analyticsRouter } from './routes/analytics.js';
 import { authRouter, adminRouter } from './routes/auth.js';
 import { requireAuth, requireApproved } from './auth.js';
 
@@ -46,6 +47,7 @@ export function createApp() {
   app.use('/api/machines', machinesRouter);
   app.use('/api/expenses', expensesRouter);
   app.use('/api/profit-split', profitSplitRouter);
+  app.use('/api/analytics', analyticsRouter);
 
   // Serve built frontend when it exists (production / local single-server mode)
   const dist = path.join(__dirname, '..', 'frontend', 'dist');

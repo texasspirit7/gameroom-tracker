@@ -16,6 +16,7 @@ import MachineDetail from './pages/MachineDetail.jsx';
 import Expenses from './pages/Expenses.jsx';
 import AdminUsers from './pages/AdminUsers.jsx';
 import ProfitSplit from './pages/ProfitSplit.jsx';
+import Analytics from './pages/Analytics.jsx';
 
 const NAV = [
   { to: '/', label: 'Dashboard', icon: '📊', end: true },
@@ -25,6 +26,7 @@ const NAV = [
   { to: '/expenses', label: 'Expenses', icon: '🧾' },
   { to: '/admin', label: 'Admin — Users', icon: '🛡️' },
   { to: '/profit-split', label: 'Profit Split', icon: '🤝', adminOnly: true },
+  { to: '/analytics', label: 'Analytics', icon: '🔍', adminOnly: true },
 ];
 
 // The date range picker only affects data on these routes
@@ -142,6 +144,7 @@ function AppShell() {
           <Route path="/expenses" element={<Expenses />} />
           <Route path="/admin" element={<AdminUsers />} />
           <Route path="/profit-split" element={<ProfitSplit />} />
+          <Route path="/analytics" element={<Analytics />} />
         </Routes>
       </main>
     </div>
