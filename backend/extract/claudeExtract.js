@@ -44,7 +44,10 @@ const SHEET_TOOL = {
       expenses: {
         type: 'array',
         description:
-          'Non-empty expense rows: pay ("name" rows under Pay), "FD" row (label category as "family dollar", NOT "food"), coke, grass, cleaning, sams, walmart, misc, loan, rent, bonus, drawing, credit, referral',
+          'Non-empty expense rows. Every payee row under "Pay" (each row literally labeled "name" with a person\'s ' +
+          'amount next to it) MUST use category "pay" — never use the category "name" itself, "name" is just the ' +
+          'row label on the sheet, not a category. Other categories: "FD" row (label category as "family dollar", ' +
+          'NOT "food"), coke, grass, cleaning, sams, walmart, misc, loan, rent, bonus, drawing, credit, referral',
         items: {
           type: 'object',
           required: ['category', 'amount'],
@@ -78,6 +81,16 @@ export function mediaTypeForExt(ext) {
 // output, coerce it here so nothing downstream has to guess.
 export function normalizeMachines(machines) {
   return Array.isArray(machines) ? machines : Object.values(machines || {});
+}
+
+// "name" is the row label on the sheet for a payee under Pay, not a real
+// category — the model sometimes uses it as the category verbatim despite
+// the prompt, producing a duplicate-looking "name" entry alongside "pay".
+export function normalizeExpenses(expenses) {
+  return (Array.isArray(expenses) ? expenses : []).map((e) => ({
+    ...e,
+    category: String(e?.category || '').trim().toLowerCase() === 'name' ? 'pay' : e.category,
+  }));
 }
 
 /** Extract sheet data from a photo/screenshot using Claude vision with forced tool_use. */
@@ -131,7 +144,7 @@ export async function extractFromImage(buffer) {
       match_amount: data.settlement?.match_amount || 0,
       loan_rtn: data.settlement?.loan_rtn || 0,
     },
-    expenses: data.expenses || [],
+    expenses: normalizeExpenses(data.expenses),
     bank: data.bank || {},
   };
 }

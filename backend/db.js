@@ -125,3 +125,8 @@ db.exec(`
 // One-time data fix: the sheet's "FD" row (Family Dollar store) was previously
 // mislabeled as category "food" — relabel any already-stored rows.
 db.exec("UPDATE expenses SET category = 'family dollar' WHERE category = 'food'");
+
+// One-time data fix: "name" is the row label for a payee under Pay, not a
+// real category — Claude vision extraction sometimes used it verbatim,
+// producing a duplicate-looking "name" entry alongside the correct "pay" one.
+db.exec("UPDATE expenses SET category = 'pay' WHERE category = 'name'");

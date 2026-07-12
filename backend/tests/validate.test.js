@@ -12,7 +12,7 @@ process.env.DATA_DIR = tempDir;
 process.env.JWT_SECRET = 'test-only-secret';
 
 const { validateSheet, computeMeterProfit } = await import('../extract/validate.js');
-const { normalizeMachines } = await import('../extract/claudeExtract.js');
+const { normalizeMachines, normalizeExpenses } = await import('../extract/claudeExtract.js');
 const { db } = await import('../db.js');
 
 after(() => {
@@ -36,6 +36,28 @@ describe('normalizeMachines (regression: production "rows.reduce is not a functi
   test('null/undefined becomes an empty array', () => {
     assert.deepEqual(normalizeMachines(null), []);
     assert.deepEqual(normalizeMachines(undefined), []);
+  });
+});
+
+describe('normalizeExpenses (regression: "name" and "pay" shown as two separate expense categories)', () => {
+  test('a "name" category is remapped to "pay"', () => {
+    const result = normalizeExpenses([{ category: 'name', amount: 300 }]);
+    assert.deepEqual(result, [{ category: 'pay', amount: 300 }]);
+  });
+
+  test('is case/whitespace-insensitive', () => {
+    const result = normalizeExpenses([{ category: '  Name ', amount: 300 }]);
+    assert.equal(result[0].category, 'pay');
+  });
+
+  test('other categories pass through unchanged', () => {
+    const result = normalizeExpenses([{ category: 'pay', amount: 300 }, { category: 'cleaning', amount: 60 }]);
+    assert.deepEqual(result, [{ category: 'pay', amount: 300 }, { category: 'cleaning', amount: 60 }]);
+  });
+
+  test('non-array input becomes an empty array', () => {
+    assert.deepEqual(normalizeExpenses(null), []);
+    assert.deepEqual(normalizeExpenses(undefined), []);
   });
 });
 
