@@ -1,8 +1,8 @@
 import { useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
 import {
-  ResponsiveContainer, LineChart, Line, BarChart, Bar, XAxis, YAxis,
-  Tooltip, Legend, CartesianGrid, ReferenceLine, Cell,
+  ResponsiveContainer, BarChart, Bar, XAxis, YAxis,
+  Tooltip, Legend, CartesianGrid, Cell,
 } from 'recharts';
 import { api, fmt, signedMoney } from '../api.js';
 import { useDateRange } from '../DateRangeContext.jsx';
@@ -69,25 +69,6 @@ export default function Dashboard() {
         ) : (
           <p className="muted" style={{ margin: 0 }}>No alerts — all clear ✅</p>
         )}
-      </div>
-
-      <div className="panel">
-        <h2>Profit trend by {chartNoun}</h2>
-        {hasData ? (
-          <ResponsiveContainer width="100%" height={280}>
-            <LineChart data={buckets} margin={{ top: 6, right: 16, left: 0, bottom: 0 }}>
-              <CartesianGrid strokeDasharray="3 3" stroke="#e4e8f0" />
-              <XAxis dataKey="label" fontSize={12} />
-              <YAxis fontSize={12} />
-              <Tooltip formatter={(v) => `$${fmt(v)}`} />
-              <Legend />
-              <ReferenceLine y={0} stroke="#999" />
-              <Line type="monotone" dataKey="meter_profit" name="Meter profit" stroke="#0f6dd1" strokeWidth={2} dot={{ r: 3 }} />
-              <Line type="monotone" dataKey="cash_profit" name="Cash profit" stroke="#16803c" strokeWidth={2} dot={{ r: 3 }} connectNulls />
-              <Line type="monotone" dataKey="over_short" name="Over/Short" stroke="#c22f2f" strokeDasharray="5 4" dot={{ r: 3 }} connectNulls />
-            </LineChart>
-          </ResponsiveContainer>
-        ) : <p className="muted">No data in this range.</p>}
       </div>
 
       <div className="grid-2">
