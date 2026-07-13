@@ -82,9 +82,12 @@ export default function Dashboard() {
               <Tooltip formatter={(v) => `$${fmt(v)}`} />
               <Legend />
               <ReferenceLine y={0} stroke="#999" />
-              <Line type="monotone" dataKey="meter_profit" name="Meter profit" stroke="#0f6dd1" strokeWidth={2} dot={{ r: 3 }} />
-              <Line type="monotone" dataKey="cash_profit" name="Cash profit" stroke="#16803c" strokeWidth={2} dot={{ r: 3 }} connectNulls />
-              <Line type="monotone" dataKey="over_short" name="Over/Short" stroke="#c22f2f" strokeDasharray="5 4" dot={{ r: 3 }} connectNulls />
+              <Line type="monotone" dataKey="total_in" name="Total In" stroke="#0f6dd1" strokeWidth={2} dot={{ r: 3 }} />
+              <Line type="monotone" dataKey="total_out" name="Total Out" stroke="#9db6d8" strokeWidth={2} dot={{ r: 3 }} />
+              <Line type="monotone" dataKey="match" name="Match" stroke="#8e5cd9" strokeWidth={2} dot={{ r: 3 }} />
+              <Line type="monotone" dataKey="expenses" name="Expenses" stroke="#b97c10" strokeWidth={2} dot={{ r: 3 }} />
+              <Line type="monotone" dataKey="meter_profit" name="Meter Profit" stroke="#16803c" strokeWidth={2} dot={{ r: 3 }} />
+              <Line type="monotone" dataKey="net_profit" name="Net Profit" stroke="#2ca8b3" strokeWidth={2} dot={{ r: 3 }} />
             </LineChart>
           </ResponsiveContainer>
         ) : <p className="muted">No data in this range.</p>}

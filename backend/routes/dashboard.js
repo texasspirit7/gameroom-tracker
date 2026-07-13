@@ -66,7 +66,7 @@ function resolveRange(req) {
 
 function aggregate(from, to) {
   const sheets = db.prepare(`
-    SELECT id, sheet_date, total_in, total_out, meter_profit, cash_profit, over_short
+    SELECT id, sheet_date, total_in, total_out, match_amount, meter_profit, cash_profit, over_short
     FROM sheets WHERE sheet_date BETWEEN ? AND ? ORDER BY sheet_date, id
   `).all(from, to);
 
@@ -153,25 +153,50 @@ dashboardRouter.get('/', (req, res) => {
   }
 
   const chartGran = chooseGranularity(daysBetween(range.from, range.to));
+
+  // Per-sheet expense totals (for the "Expenses" bucket line) — sheet-linked only here;
+  // manually-logged "other" expenses are bucketed separately below by their own date.
+  const sheetExpenseTotals = new Map(
+    db.prepare(`
+      SELECT e.sheet_id, SUM(e.amount) AS total FROM expenses e
+      JOIN sheets s ON s.id = e.sheet_id WHERE s.sheet_date BETWEEN ? AND ?
+      GROUP BY e.sheet_id
+    `).all(range.from, range.to).map((r) => [r.sheet_id, r.total])
+  );
+  const otherExpenseRows = db.prepare(
+    'SELECT expense_date, amount FROM other_expenses WHERE expense_date BETWEEN ? AND ?'
+  ).all(range.from, range.to);
+
   const map = new Map();
-  for (const s of sheets) {
-    const key = bucketKey(s.sheet_date, chartGran);
+  const getBucket = (key) => {
     if (!map.has(key)) {
       map.set(key, {
         period: key, label: bucketLabel(key, chartGran),
-        total_in: 0, total_out: 0, meter_profit: 0,
+        total_in: 0, total_out: 0, match: 0, expenses: 0, meter_profit: 0,
         cash_profit: null, over_short: null, sheet_count: 0,
       });
     }
-    const b = map.get(key);
+    return map.get(key);
+  };
+
+  for (const s of sheets) {
+    const b = getBucket(bucketKey(s.sheet_date, chartGran));
     b.total_in += s.total_in || 0;
     b.total_out += s.total_out || 0;
+    b.match += s.match_amount || 0;
+    b.expenses += sheetExpenseTotals.get(s.id) || 0;
     b.meter_profit += s.meter_profit || 0;
     if (s.cash_profit != null) b.cash_profit = (b.cash_profit || 0) + s.cash_profit;
     if (s.over_short != null) b.over_short = (b.over_short || 0) + s.over_short;
     b.sheet_count += 1;
   }
-  const buckets = [...map.values()].map((b) => ({ ...b, hold_pct: holdPct(b.total_in, b.total_out) }));
+  for (const e of otherExpenseRows) {
+    getBucket(bucketKey(e.expense_date, chartGran)).expenses += e.amount || 0;
+  }
+
+  const buckets = [...map.values()]
+    .map((b) => ({ ...b, net_profit: b.meter_profit - b.expenses, hold_pct: holdPct(b.total_in, b.total_out) }))
+    .sort((a, b) => (a.period < b.period ? -1 : 1));
 
   const sheetExpenses = db.prepare(`
     SELECT e.category, SUM(e.amount) AS amount
