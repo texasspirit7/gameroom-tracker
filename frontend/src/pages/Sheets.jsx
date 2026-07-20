@@ -34,12 +34,15 @@ function groupByMonth(sheets) {
   return [...map.values()].sort((a, b) => (a.key < b.key ? 1 : -1));
 }
 
+const currentMonthKey = () => new Date().toISOString().slice(0, 7);
+
 export default function Sheets() {
   const { isAdmin, authEnabled } = useAuth();
   const canModify = !authEnabled || isAdmin;
   const [sheets, setSheets] = useState(null);
   const [error, setError] = useState(null);
-  const [expandedMonth, setExpandedMonth] = useState(null);
+  // Defaults to the current calendar month — expanded automatically, every other month starts collapsed.
+  const [expandedMonth, setExpandedMonth] = useState(currentMonthKey);
   const navigate = useNavigate();
 
   const load = () => api.sheets().then(setSheets).catch((e) => setError(e.message));
