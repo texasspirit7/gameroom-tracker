@@ -1,15 +1,9 @@
 import { useRef, useState } from 'react';
 import { useUpload } from '../UploadContext.jsx';
 
-function todayISO() {
-  const d = new Date();
-  const pad = (n) => String(n).padStart(2, '0');
-  return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`;
-}
-
 export default function Upload() {
   const [file, setFile] = useState(null);
-  const [sheetDate, setSheetDate] = useState(todayISO());
+  const [sheetDate, setSheetDate] = useState('');
   const [fileError, setFileError] = useState(null);
   const [drag, setDrag] = useState(false);
   const inputRef = useRef(null);
@@ -31,8 +25,9 @@ export default function Upload() {
       <h1 className="page-title">Upload Daily Sheet</h1>
       <div className="page-sub">
         Excel (.xlsx) is read directly. Photos (.jpg/.png) are read with AI — always review before verifying.
-        Defaults to today — change it if you're backfilling a previous day. Uploading more than one sheet
-        on the same date is fine (e.g. separate shifts) — both are kept.
+        The sheet date is auto-detected from the sheet itself — only set it manually if you need to override
+        that (e.g. backfilling, or the date wasn't readable). Uploading more than one sheet on the same date
+        is fine (e.g. separate shifts) — both are kept.
       </div>
 
       <div className="panel">
@@ -64,10 +59,10 @@ export default function Upload() {
 
             <div className="form-row" style={{ marginTop: 16 }}>
               <label>
-                Sheet date
+                Sheet date (optional — auto-detected)
                 <input type="date" value={sheetDate} onChange={(e) => setSheetDate(e.target.value)} />
               </label>
-              <button onClick={submit} disabled={!file || !sheetDate}>Upload & Extract</button>
+              <button onClick={submit} disabled={!file}>Upload & Extract</button>
             </div>
 
             {fileError && <div className="error-box">{fileError}</div>}

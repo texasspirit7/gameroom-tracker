@@ -9,6 +9,13 @@ const SHEET_TOOL = {
     type: 'object',
     required: ['machines', 'totals'],
     properties: {
+      sheet_date: {
+        type: 'string',
+        description:
+          'The date printed on the sheet itself — a bare date (e.g. "07/06/2026") printed unlabeled in the ' +
+          'settlement area, below the Loan RTN box and above the Total row. Convert it to YYYY-MM-DD. ' +
+          'Omit this field entirely if no date is visible anywhere on the sheet.',
+      },
       machines: {
         type: 'array',
         description: 'One entry per machine row (1..40). Skip nothing — include zero rows too.',
@@ -93,6 +100,14 @@ export function normalizeExpenses(expenses) {
   }));
 }
 
+const SHEET_DATE_RE = /^\d{4}-\d{2}-\d{2}$/;
+
+// Never trust the LLM's date string verbatim — only accept a strict
+// YYYY-MM-DD match, otherwise treat it as if no date were found at all.
+export function normalizeSheetDate(sheetDate) {
+  return typeof sheetDate === 'string' && SHEET_DATE_RE.test(sheetDate) ? sheetDate : null;
+}
+
 /** Extract sheet data from a photo/screenshot using Claude vision with forced tool_use. */
 export async function extractFromImage(buffer) {
   if (!config.anthropicApiKey) {
@@ -122,6 +137,8 @@ export async function extractFromImage(buffer) {
               '(#, Previous In, Current In, Daily In, Previous Out, Current Out, Daily Out, Hold),',
               'a settlement box (Total Out, Match, Pay names, expense rows, Total In, Loan RTN)',
               'and a Bank box (Opening, Profit (Loss), Short/Over, New Bank).',
+              'There is usually a bare date (e.g. 07/06/2026) printed with no label in the middle of the',
+              'settlement area, near the bottom above the Total row — record that as sheet_date if visible.',
               'Read every machine row exactly as printed, including rows that are all zeros.',
               'Numbers in parentheses or red are negative.',
               'Empty cells rendered as "-" mean zero — never treat a leading "-" as a minus sign on the next value.',
@@ -139,6 +156,7 @@ export async function extractFromImage(buffer) {
 
   return {
     machines: normalizeMachines(data.machines),
+    sheet_date: normalizeSheetDate(data.sheet_date),
     totals: data.totals || {},
     settlement: {
       match_amount: data.settlement?.match_amount || 0,

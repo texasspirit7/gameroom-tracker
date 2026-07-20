@@ -90,7 +90,7 @@ function persistSheet({ extracted, sheetDate, source, filePath, warnings }) {
   return sheetId;
 }
 
-// POST /api/sheets/upload  (multipart: file, sheet_date? — defaults to today)
+// POST /api/sheets/upload  (multipart: file, sheet_date? — auto-detected from the sheet if omitted, else today)
 sheetsRouter.post('/upload', upload.single('file'), async (req, res) => {
   try {
     if (!req.file) return res.status(400).json({ error: 'No file uploaded' });
@@ -106,10 +106,12 @@ sheetsRouter.post('/upload', upload.single('file'), async (req, res) => {
       ? extractFromXlsx(req.file.buffer)
       : await extractFromImage(req.file.buffer);
 
-    // Defaults to today (the upload day) but can be overridden — e.g. backfilling a previous day.
-    // Never read from the file itself.
+    // Priority: an explicit sheet_date from the form (manual override) > the date
+    // auto-extracted from the sheet itself > today, as a last resort if neither is available.
     const providedDate = req.body.sheet_date;
-    const sheetDate = providedDate && DATE_RE.test(providedDate) ? providedDate : todayISO();
+    const sheetDate = (providedDate && DATE_RE.test(providedDate))
+      ? providedDate
+      : (extracted.sheet_date || todayISO());
 
     const { warnings } = validateSheet({ sheetDate, machines: extracted.machines, totals: extracted.totals });
 

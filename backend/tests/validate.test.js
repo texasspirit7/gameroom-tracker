@@ -12,7 +12,7 @@ process.env.DATA_DIR = tempDir;
 process.env.JWT_SECRET = 'test-only-secret';
 
 const { validateSheet, computeMeterProfit } = await import('../extract/validate.js');
-const { normalizeMachines, normalizeExpenses } = await import('../extract/claudeExtract.js');
+const { normalizeMachines, normalizeExpenses, normalizeSheetDate } = await import('../extract/claudeExtract.js');
 const { db } = await import('../db.js');
 
 after(() => {
@@ -58,6 +58,24 @@ describe('normalizeExpenses (regression: "name" and "pay" shown as two separate 
   test('non-array input becomes an empty array', () => {
     assert.deepEqual(normalizeExpenses(null), []);
     assert.deepEqual(normalizeExpenses(undefined), []);
+  });
+});
+
+describe('normalizeSheetDate (auto-detected date from Claude vision — never trust the LLM string verbatim)', () => {
+  test('a well-formed YYYY-MM-DD string passes through', () => {
+    assert.equal(normalizeSheetDate('2026-07-06'), '2026-07-06');
+  });
+
+  test('malformed strings (wrong format, MM/DD/YYYY, garbage) become null', () => {
+    assert.equal(normalizeSheetDate('07/06/2026'), null);
+    assert.equal(normalizeSheetDate('not a date'), null);
+    assert.equal(normalizeSheetDate('2026-7-6'), null);
+  });
+
+  test('missing/non-string input becomes null', () => {
+    assert.equal(normalizeSheetDate(undefined), null);
+    assert.equal(normalizeSheetDate(null), null);
+    assert.equal(normalizeSheetDate(12345), null);
   });
 });
 

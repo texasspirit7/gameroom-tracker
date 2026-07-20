@@ -13,6 +13,30 @@ const num = (v) => {
   return /\(.*\)/.test(String(v)) ? -n : n;
 };
 
+const DATE_CELL_RE = /^(\d{1,2})\/(\d{1,2})\/(\d{4})$/;
+
+/**
+ * The sheet's own date is printed unlabeled in the settlement area (below
+ * Loan RTN, above the Total row) — scan for the first cell that looks like
+ * a bare MM/DD/YYYY date (or an actual Date-typed cell) starting after the
+ * machine table, and convert it to YYYY-MM-DD.
+ */
+function findSheetDate(grid, startRow) {
+  for (let r = startRow; r < grid.length; r++) {
+    for (const cell of grid[r] || []) {
+      if (cell instanceof Date && !Number.isNaN(cell.getTime())) {
+        return cell.toISOString().slice(0, 10);
+      }
+      const m = String(cell ?? '').trim().match(DATE_CELL_RE);
+      if (m) {
+        const [, mo, da, yr] = m;
+        return `${yr}-${mo.padStart(2, '0')}-${da.padStart(2, '0')}`;
+      }
+    }
+  }
+  return null;
+}
+
 /**
  * Parse the daily sheet layout from an .xlsx buffer.
  * Finds the machine meter table by its header row, then scans the
@@ -105,6 +129,7 @@ export function extractFromXlsx(buffer) {
 
   return {
     machines,
+    sheet_date: findSheetDate(grid, i),
     totals: {
       total_in: labelValue('total in'),
       total_out: labelValue('total out'),

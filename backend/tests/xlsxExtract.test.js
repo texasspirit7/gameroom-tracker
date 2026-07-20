@@ -58,3 +58,23 @@ describe('extractFromXlsx — machine table + totals sanity', () => {
     assert.throws(() => extractFromXlsx(buf), /Could not find machine table header/);
   });
 });
+
+describe('extractFromXlsx (regression: auto-detect the sheet\'s own printed date)', () => {
+  test('finds a bare MM/DD/YYYY cell in the settlement area and converts it to YYYY-MM-DD', () => {
+    const buf = buildSheet([['Referral', '', '', '07/06/2026'], ['Total', '$', 50, 'Total', '$', 100]]);
+    const result = extractFromXlsx(buf);
+    assert.equal(result.sheet_date, '2026-07-06');
+  });
+
+  test('single-digit month/day are zero-padded', () => {
+    const buf = buildSheet([['Referral', '', '', '7/6/2026']]);
+    const result = extractFromXlsx(buf);
+    assert.equal(result.sheet_date, '2026-07-06');
+  });
+
+  test('is null when no date-shaped cell is present', () => {
+    const buf = buildSheet([['Referral', '', '', 'nothing here']]);
+    const result = extractFromXlsx(buf);
+    assert.equal(result.sheet_date, null);
+  });
+});

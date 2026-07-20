@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 import xlsx from 'xlsx';
 import { startTestServer, signInAsAdmin } from './helpers/testServer.js';
 
-function buildSheetXlsx(machineRows) {
+function buildSheetXlsx(machineRows, printedDate) {
   const wb = xlsx.utils.book_new();
   const rows = [
     ['#', 'Previous In', 'Current In', 'Daily In', 'Previous Out', 'Current Out', 'Daily Out', 'Hold'],
@@ -11,6 +11,7 @@ function buildSheetXlsx(machineRows) {
     ['Total', '', '', 300, '', '', 110, '63%'],
     [],
     ['Total Out', '$', 110, 'Total In', '$', 300, 'Bank'],
+    ...(printedDate ? [['Referral', '', '', printedDate]] : []),
   ];
   const ws = xlsx.utils.aoa_to_sheet(rows);
   xlsx.utils.book_append_sheet(wb, ws, 'Sheet1');
@@ -20,18 +21,24 @@ function buildSheetXlsx(machineRows) {
 async function uploadXlsx(baseUrl, cookie, buffer, sheetDate) {
   const form = new FormData();
   form.append('file', new Blob([buffer], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' }), 'sheet.xlsx');
-  form.append('sheet_date', sheetDate);
+  if (sheetDate) form.append('sheet_date', sheetDate);
   return fetch(`${baseUrl}/api/sheets/upload`, { method: 'POST', headers: { Cookie: cookie }, body: form });
 }
 
-describe('POST /api/sheets/upload', () => {
-  let ctx, cookie;
-  before(async () => {
-    ctx = await startTestServer();
-    cookie = await signInAsAdmin(ctx.baseUrl);
-  });
-  after(async () => { await ctx.stop(); });
+const todayISO = () => new Date().toISOString().slice(0, 10);
 
+// One shared server for the whole file — Node caches ES modules per process,
+// so a second startTestServer() call here would silently reuse (and, after
+// an earlier block's teardown, find *closed*) the same db.js singleton rather
+// than getting a fresh one. Tests below use distinct dates to stay isolated.
+let ctx, cookie;
+before(async () => {
+  ctx = await startTestServer();
+  cookie = await signInAsAdmin(ctx.baseUrl);
+});
+after(async () => { await ctx.stop(); });
+
+describe('POST /api/sheets/upload', () => {
   test('golden path: normal sheet uploads successfully with correct meter profit', async () => {
     const buf = buildSheetXlsx([[1, 0, 100, 100, 0, 50, 50, '50%'], [2, 0, 200, 200, 0, 60, 60, '70%']]);
     const res = await uploadXlsx(ctx.baseUrl, cookie, buf, '2026-01-01');
@@ -75,5 +82,34 @@ describe('POST /api/sheets/upload', () => {
     form.append('sheet_date', '2026-01-04');
     const res = await fetch(`${ctx.baseUrl}/api/sheets/upload`, { method: 'POST', headers: { Cookie: cookie }, body: form });
     assert.equal(res.status, 400);
+  });
+});
+
+describe('POST /api/sheets/upload — auto-detected sheet_date priority', () => {
+  test('no sheet_date in the form uses the date auto-extracted from the sheet', async () => {
+    const buf = buildSheetXlsx([[1, 0, 100, 100, 0, 50, 50, '50%']], '03/15/2026');
+    const res = await uploadXlsx(ctx.baseUrl, cookie, buf, null);
+    assert.equal(res.status, 200);
+    const { sheetId } = await res.json();
+    const sheet = await (await fetch(`${ctx.baseUrl}/api/sheets/${sheetId}`, { headers: { Cookie: cookie } })).json();
+    assert.equal(sheet.sheet_date, '2026-03-15');
+  });
+
+  test('an explicit sheet_date in the form overrides the date printed on the sheet', async () => {
+    const buf = buildSheetXlsx([[1, 0, 100, 100, 0, 50, 50, '50%']], '03/15/2026');
+    const res = await uploadXlsx(ctx.baseUrl, cookie, buf, '2026-04-01');
+    assert.equal(res.status, 200);
+    const { sheetId } = await res.json();
+    const sheet = await (await fetch(`${ctx.baseUrl}/api/sheets/${sheetId}`, { headers: { Cookie: cookie } })).json();
+    assert.equal(sheet.sheet_date, '2026-04-01');
+  });
+
+  test('no sheet_date and no printed date falls back to today', async () => {
+    const buf = buildSheetXlsx([[1, 0, 100, 100, 0, 50, 50, '50%']]);
+    const res = await uploadXlsx(ctx.baseUrl, cookie, buf, null);
+    assert.equal(res.status, 200);
+    const { sheetId } = await res.json();
+    const sheet = await (await fetch(`${ctx.baseUrl}/api/sheets/${sheetId}`, { headers: { Cookie: cookie } })).json();
+    assert.equal(sheet.sheet_date, todayISO());
   });
 });
