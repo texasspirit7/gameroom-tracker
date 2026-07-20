@@ -39,8 +39,25 @@ function persistSheet({ extracted, sheetDate, source, filePath, warnings }) {
   // calculated by hand and isn't a consistent formula sheet to sheet.
   const meterProfit = computeMeterProfit(extracted);
   const cashProfit = extracted.bank?.cash_profit ?? null;
-  const overShort =
+  let overShort =
     cashProfit != null ? cashProfit - meterProfit : extracted.bank?.over_short ?? null;
+
+  // An unreconciled Short/Over reading is just whatever the paper's author wrote by hand —
+  // reject it outright if it's physically impossible (a drawer can't be short/over by more
+  // than the total dollars that moved through the machines that day) rather than trusting
+  // a likely misread number into the record.
+  if (cashProfit == null && overShort != null) {
+    const totalActivity = (Number(extracted.totals?.total_in) || 0) + (Number(extracted.totals?.total_out) || 0);
+    if (Math.abs(overShort) > totalActivity) {
+      const sign = overShort < 0 ? '-' : '';
+      warnings.push(
+        `Sheet's own Short/Over reading of ${sign}$${Math.abs(overShort).toLocaleString()} is implausible for a day ` +
+        `with $${totalActivity.toLocaleString()} total activity — likely misread. Count the drawer and enter Cash Profit ` +
+        `to record a verified figure.`
+      );
+      overShort = null;
+    }
+  }
 
   const insertSheet = db.prepare(`
     INSERT INTO sheets (sheet_date, source, file_path, total_in, total_out, match_amount,

@@ -95,10 +95,12 @@ tr.clickable { cursor: pointer; }
 .badge.verified { background: #e2f5e9; color: var(--good); }
 .badge.high { background: #fde8e8; color: var(--bad); }
 .badge.medium { background: #fdf3e0; color: var(--warn); }
+.badge.low { background: #e7f0fc; color: var(--accent-2); }
 
 .alert-list { display: flex; flex-direction: column; gap: 8px; }
 .alert-item { display: flex; gap: 10px; align-items: center; padding: 10px 12px; border-radius: 8px; background: #fdf6f6; border: 1px solid #f3dcdc; font-size: 13px; }
 .alert-item.medium { background: #fdf9f0; border-color: #f0e4c8; }
+.alert-item.low { background: #f2f7fd; border-color: #d9e6f7; }
 
 button, .btn {
   display: inline-block;

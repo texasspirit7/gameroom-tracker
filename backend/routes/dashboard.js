@@ -128,11 +128,26 @@ function alertsForRange(from, to, label) {
     }
   }
 
+  // Only count sheets an admin has actually reconciled (entered Cash Profit after counting
+  // the drawer) — the paper's own handwritten Short/Over box isn't a consistent formula
+  // sheet to sheet (same reliability problem meter_profit already accounts for), so an
+  // unreconciled raw reading must not feed this aggregate.
   const cash = db.prepare(
-    'SELECT SUM(over_short) AS os FROM sheets WHERE sheet_date BETWEEN ? AND ? AND over_short IS NOT NULL'
+    'SELECT SUM(over_short) AS os FROM sheets WHERE sheet_date BETWEEN ? AND ? AND cash_profit IS NOT NULL'
   ).get(from, to).os;
   if (cash != null && cash <= -100) {
     alerts.unshift({ machine: null, level: 'high', message: `Cash short $${Math.abs(cash).toLocaleString()}${suffix}` });
+  }
+
+  const unreconciled = db.prepare(
+    'SELECT COUNT(*) AS n FROM sheets WHERE sheet_date BETWEEN ? AND ? AND cash_profit IS NULL AND over_short IS NOT NULL'
+  ).get(from, to).n;
+  if (unreconciled > 0) {
+    alerts.push({
+      machine: null, level: 'low',
+      message: `${unreconciled} sheet${unreconciled === 1 ? '' : 's'} ${unreconciled === 1 ? 'has' : 'have'} an unverified ` +
+        `Short/Over reading from the paper sheet — enter Cash Profit after counting the drawer to include ${unreconciled === 1 ? 'it' : 'them'} in Cash Short tracking${suffix}`,
+    });
   }
 
   return alerts;
