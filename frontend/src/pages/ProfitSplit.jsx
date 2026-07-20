@@ -13,6 +13,7 @@ export default function ProfitSplit() {
   const [rows, setRows] = useState(null);
   const [error, setError] = useState(null);
   const [saving, setSaving] = useState(null);
+  const [notesDraft, setNotesDraft] = useState({}); // month -> in-progress textarea value
 
   const load = () => api.profitSplit().then(setRows).catch((e) => setError(e.message));
   useEffect(() => { load(); }, []);
@@ -27,6 +28,17 @@ export default function ProfitSplit() {
       setError(e.message);
     } finally {
       setSaving(null);
+    }
+  };
+
+  const saveNotes = async (row) => {
+    const draft = notesDraft[row.month];
+    if (draft === undefined || draft === row.notes) return;
+    try {
+      await api.setProfitSplitNotes(row.month, draft);
+      await load();
+    } catch (e) {
+      setError(e.message);
     }
   };
 
@@ -49,7 +61,7 @@ export default function ProfitSplit() {
             <thead>
               <tr>
                 <th>Month</th><th>Split</th><th>Net Profit</th>
-                <th>40% Amount</th><th>60% Amount</th><th>Paid</th>
+                <th>40% Amount</th><th>60% Amount</th><th>Paid</th><th>Comments</th>
               </tr>
             </thead>
             <tbody>
@@ -76,6 +88,16 @@ export default function ProfitSplit() {
                         {new Date(r.paid_at).toLocaleDateString()}{r.paid_by ? ` · ${r.paid_by}` : ''}
                       </div>
                     )}
+                  </td>
+                  <td>
+                    <textarea
+                      rows={2}
+                      style={{ width: 180, resize: 'vertical', font: 'inherit', fontSize: 12 }}
+                      placeholder="Add a comment…"
+                      value={notesDraft[r.month] ?? r.notes}
+                      onChange={(e) => setNotesDraft((prev) => ({ ...prev, [r.month]: e.target.value }))}
+                      onBlur={() => saveNotes(r)}
+                    />
                   </td>
                 </tr>
               ))}

@@ -67,6 +67,7 @@ body {
 .card.bad { border-top-color: var(--bad); }
 .value.good, .pos { color: var(--good); }
 .value.bad, .neg { color: var(--bad); }
+.cell-flag { background: #fde8e8; color: var(--bad); font-weight: 600; cursor: help; }
 
 .panel {
   background: var(--panel); border-radius: var(--radius); box-shadow: var(--shadow);

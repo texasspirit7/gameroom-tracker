@@ -17,20 +17,27 @@ function buildSheetXlsx() {
   return xlsx.write(wb, { type: 'buffer', bookType: 'xlsx' });
 }
 
-describe('/api/profit-split — admin-only page', () => {
-  let ctx, adminCookie, userCookie;
-  before(async () => {
-    ctx = await startTestServer();
-    adminCookie = await signInAsAdmin(ctx.baseUrl);
-    userCookie = await signInAsApprovedUser(ctx.baseUrl, adminCookie);
+// One shared server for the whole file — Node caches ES modules per process,
+// so a second startTestServer() call here would silently reuse (and, after
+// an earlier block's teardown, find *closed*) the same db.js singleton.
+let ctx, adminCookie, userCookie;
+before(async () => {
+  ctx = await startTestServer();
+  adminCookie = await signInAsAdmin(ctx.baseUrl);
+  userCookie = await signInAsApprovedUser(ctx.baseUrl, adminCookie);
 
+  const upload = async (sheetDate) => {
     const form = new FormData();
     form.append('file', new Blob([buildSheetXlsx()]), 'sheet.xlsx');
-    form.append('sheet_date', '2026-04-01');
+    form.append('sheet_date', sheetDate);
     await fetch(`${ctx.baseUrl}/api/sheets/upload`, { method: 'POST', headers: { Cookie: adminCookie }, body: form });
-  });
-  after(async () => { await ctx.stop(); });
+  };
+  await upload('2026-04-01');
+  await upload('2026-05-01');
+});
+after(async () => { await ctx.stop(); });
 
+describe('/api/profit-split — admin-only page', () => {
   test('a non-admin approved user gets 403', async () => {
     const res = await fetch(`${ctx.baseUrl}/api/profit-split`, { headers: { Cookie: userCookie } });
     assert.equal(res.status, 403);
@@ -64,5 +71,42 @@ describe('/api/profit-split — admin-only page', () => {
     assert.equal(row.paid, true);
     assert.ok(row.paid_at);
     assert.equal(row.paid_by, 'admin@test.local');
+  });
+});
+
+describe('/api/profit-split — per-month comments (regression: notes must not disturb paid state)', () => {
+  test('a new month has an empty notes string by default', async () => {
+    const rows = await (await fetch(`${ctx.baseUrl}/api/profit-split`, { headers: { Cookie: adminCookie } })).json();
+    const row = rows.find((r) => r.month === '2026-05');
+    assert.equal(row.notes, '');
+  });
+
+  test('admin can save a comment, and it persists', async () => {
+    const res = await fetch(`${ctx.baseUrl}/api/profit-split/2026-05`, {
+      method: 'PATCH', headers: { Cookie: adminCookie, 'Content-Type': 'application/json' },
+      body: JSON.stringify({ notes: 'Waiting on owner to confirm split percentage' }),
+    });
+    assert.equal(res.status, 200);
+    const rows = await (await fetch(`${ctx.baseUrl}/api/profit-split`, { headers: { Cookie: adminCookie } })).json();
+    const row = rows.find((r) => r.month === '2026-05');
+    assert.equal(row.notes, 'Waiting on owner to confirm split percentage');
+    assert.equal(row.paid, false, 'saving a comment must not mark the month paid');
+  });
+
+  test('marking a month paid does not clear an existing comment', async () => {
+    await fetch(`${ctx.baseUrl}/api/profit-split/2026-05`, {
+      method: 'PATCH', headers: { Cookie: adminCookie, 'Content-Type': 'application/json' }, body: JSON.stringify({ paid: true }),
+    });
+    const rows = await (await fetch(`${ctx.baseUrl}/api/profit-split`, { headers: { Cookie: adminCookie } })).json();
+    const row = rows.find((r) => r.month === '2026-05');
+    assert.equal(row.paid, true);
+    assert.equal(row.notes, 'Waiting on owner to confirm split percentage');
+  });
+
+  test('non-admin cannot save a comment', async () => {
+    const res = await fetch(`${ctx.baseUrl}/api/profit-split/2026-05`, {
+      method: 'PATCH', headers: { Cookie: userCookie, 'Content-Type': 'application/json' }, body: JSON.stringify({ notes: 'hi' }),
+    });
+    assert.equal(res.status, 403);
   });
 });

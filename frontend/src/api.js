@@ -50,6 +50,8 @@ export const api = {
   profitSplit: () => request('/api/profit-split'),
   setProfitSplitPaid: (month, paid) =>
     request(`/api/profit-split/${month}`, { method: 'PATCH', body: JSON.stringify({ paid }) }),
+  setProfitSplitNotes: (month, notes) =>
+    request(`/api/profit-split/${month}`, { method: 'PATCH', body: JSON.stringify({ notes }) }),
 
   analyticsByWeekday: () => request('/api/analytics/weekday'),
   analyticsByWeekdayMachines: (day) => request(`/api/analytics/weekday/${day}/machines`),

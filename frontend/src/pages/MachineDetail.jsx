@@ -23,14 +23,24 @@ export default function MachineDetail() {
 
   // When multiple sheets share a date (e.g. separate shifts), label them
   // distinctly so the chart/table don't show ambiguous duplicate dates.
+  // Also flags exactly where meter continuity breaks between consecutive
+  // sheets — this machine's Previous In/Out should equal the prior sheet's
+  // Current In/Out; a mismatch means a missed day, a misread, or a meter swap.
   const series = useMemo(() => {
     if (!data) return [];
     const dateCounts = new Map();
     for (const r of data.series) dateCounts.set(r.sheet_date, (dateCounts.get(r.sheet_date) || 0) + 1);
-    return data.series.map((r) => ({
-      ...r,
-      label: dateCounts.get(r.sheet_date) > 1 ? `${r.sheet_date} (#${r.sheet_id})` : r.sheet_date,
-    }));
+    return data.series.map((r, i) => {
+      const prior = data.series[i - 1];
+      return {
+        ...r,
+        label: dateCounts.get(r.sheet_date) > 1 ? `${r.sheet_date} (#${r.sheet_id})` : r.sheet_date,
+        break_in: i > 0 && prior.curr_in !== r.prev_in,
+        break_out: i > 0 && prior.curr_out !== r.prev_out,
+        expected_prev_in: i > 0 ? prior.curr_in : null,
+        expected_prev_out: i > 0 ? prior.curr_out : null,
+      };
+    });
   }, [data]);
 
   if (error) return <div className="error-box">{error}</div>;
@@ -85,6 +95,11 @@ export default function MachineDetail() {
 
       <div className="panel">
         <h2>History</h2>
+        {series.some((r) => r.break_in || r.break_out) && (
+          <p className="muted" style={{ marginTop: 0 }}>
+            ⚠ Highlighted cells don't match the previous sheet's reading for this machine — hover for the expected value.
+          </p>
+        )}
         <table>
           <thead>
             <tr>
@@ -96,10 +111,20 @@ export default function MachineDetail() {
             {series.slice().reverse().map((r) => (
               <tr key={r.sheet_id}>
                 <td><Link to={`/sheets/${r.sheet_id}`}>{r.label}</Link></td>
-                <td>{fmt(r.prev_in)}</td>
+                <td
+                  className={r.break_in ? 'cell-flag' : ''}
+                  title={r.break_in ? `Expected ${fmt(r.expected_prev_in)} (Current In from the previous sheet)` : undefined}
+                >
+                  {fmt(r.prev_in)}{r.break_in && ' ⚠'}
+                </td>
                 <td>{fmt(r.curr_in)}</td>
                 <td>${fmt(r.daily_in)}</td>
-                <td>{fmt(r.prev_out)}</td>
+                <td
+                  className={r.break_out ? 'cell-flag' : ''}
+                  title={r.break_out ? `Expected ${fmt(r.expected_prev_out)} (Current Out from the previous sheet)` : undefined}
+                >
+                  {fmt(r.prev_out)}{r.break_out && ' ⚠'}
+                </td>
                 <td>{fmt(r.curr_out)}</td>
                 <td>${fmt(r.daily_out)}</td>
                 <td className={r.net >= 0 ? 'pos' : 'neg'}>{signedMoney(r.net)}</td>

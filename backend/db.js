@@ -130,3 +130,8 @@ db.exec("UPDATE expenses SET category = 'family dollar' WHERE category = 'food'"
 // real category — Claude vision extraction sometimes used it verbatim,
 // producing a duplicate-looking "name" entry alongside the correct "pay" one.
 db.exec("UPDATE expenses SET category = 'pay' WHERE category = 'name'");
+
+// One-time migration: free-text notes per month on the Profit Split page.
+if (!db.prepare("PRAGMA table_info(profit_splits)").all().some((c) => c.name === 'notes')) {
+  db.exec('ALTER TABLE profit_splits ADD COLUMN notes TEXT');
+}

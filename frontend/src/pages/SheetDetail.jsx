@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import { useNavigate, useParams } from 'react-router-dom';
+import { Link, useNavigate, useParams } from 'react-router-dom';
 import { api, fmt, signedMoney } from '../api.js';
 import { useAuth } from '../AuthContext.jsx';
 
@@ -75,7 +75,17 @@ export default function SheetDetail() {
       {sheet.warnings.length > 0 && (
         <div className="warning-box">
           <strong>⚠ {sheet.warnings.length} validation warning{sheet.warnings.length === 1 ? '' : 's'}</strong>
-          <ul>{sheet.warnings.map((w, i) => <li key={i}>{w}</li>)}</ul>
+          <ul>
+            {sheet.warnings.map((w, i) => {
+              const m = w.match(/^Machine (\d+):/);
+              return (
+                <li key={i}>
+                  {w}
+                  {m && <> — <Link to={`/machines/${m[1]}`}>Compare Machine {m[1]}'s full history →</Link></>}
+                </li>
+              );
+            })}
+          </ul>
         </div>
       )}
       {saved && <div className="ok-box">Saved — totals and validations recomputed.</div>}

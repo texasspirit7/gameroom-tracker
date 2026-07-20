@@ -34,7 +34,7 @@ profitSplitRouter.get('/', adminGate, (req, res) => {
     SELECT strftime('%Y-%m', expense_date) AS month, COALESCE(SUM(amount), 0) AS exp
     FROM other_expenses GROUP BY month
   `).all();
-  const paidRows = db.prepare('SELECT month, paid, paid_at, paid_by FROM profit_splits').all();
+  const paidRows = db.prepare('SELECT month, paid, paid_at, paid_by, notes FROM profit_splits').all();
 
   const netByMonth = new Map();
   for (const r of meterByMonth) netByMonth.set(r.month, (netByMonth.get(r.month) || 0) + r.mp);
@@ -62,6 +62,7 @@ profitSplitRouter.get('/', adminGate, (req, res) => {
       paid: Boolean(paidRow?.paid),
       paid_at: paidRow?.paid_at || null,
       paid_by: paidRow?.paid_by || null,
+      notes: paidRow?.notes || '',
     };
   });
 
@@ -69,18 +70,25 @@ profitSplitRouter.get('/', adminGate, (req, res) => {
   res.json(rows);
 });
 
-/** PATCH /api/profit-split/:month  { paid: boolean } */
+/** PATCH /api/profit-split/:month  { paid?: boolean, notes?: string } — either field independently. */
 profitSplitRouter.patch('/:month', adminGate, (req, res) => {
   const { month } = req.params;
   if (!MONTH_RE.test(month)) return res.status(400).json({ error: 'Invalid month' });
-  const paid = Boolean(req.body?.paid);
-  const paidBy = req.user?.email || null;
-  const paidAt = paid ? new Date().toISOString() : null;
+
+  const hasPaid = req.body?.paid !== undefined;
+  const hasNotes = req.body?.notes !== undefined;
+  if (!hasPaid && !hasNotes) return res.status(400).json({ error: 'Nothing to update' });
+
+  const existing = db.prepare('SELECT paid, paid_at, paid_by, notes FROM profit_splits WHERE month = ?').get(month);
+  const paid = hasPaid ? Boolean(req.body.paid) : Boolean(existing?.paid);
+  const paidBy = hasPaid ? (req.user?.email || null) : (existing?.paid_by || null);
+  const paidAt = hasPaid ? (paid ? new Date().toISOString() : null) : (existing?.paid_at || null);
+  const notes = hasNotes ? String(req.body.notes).slice(0, 2000) : (existing?.notes || null);
 
   db.prepare(`
-    INSERT INTO profit_splits (month, paid, paid_at, paid_by) VALUES (?, ?, ?, ?)
-    ON CONFLICT(month) DO UPDATE SET paid = excluded.paid, paid_at = excluded.paid_at, paid_by = excluded.paid_by
-  `).run(month, paid ? 1 : 0, paidAt, paidBy);
+    INSERT INTO profit_splits (month, paid, paid_at, paid_by, notes) VALUES (?, ?, ?, ?, ?)
+    ON CONFLICT(month) DO UPDATE SET paid = excluded.paid, paid_at = excluded.paid_at, paid_by = excluded.paid_by, notes = excluded.notes
+  `).run(month, paid ? 1 : 0, paidAt, paidBy, notes);
 
-  res.json({ ok: true, month, paid, paid_at: paidAt, paid_by: paidBy });
+  res.json({ ok: true, month, paid, paid_at: paidAt, paid_by: paidBy, notes: notes || '' });
 });
