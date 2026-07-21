@@ -36,6 +36,13 @@ export const api = {
   addExpense: (body) => request('/api/expenses', { method: 'POST', body: JSON.stringify(body) }),
   deleteExpense: (id) => request(`/api/expenses/${id}`, { method: 'DELETE' }),
 
+  auditLog: (limit = 15) => request(`/api/audit?limit=${limit}`),
+  exportUrl: (kind, from, to) => (
+    kind === 'profit-split'
+      ? '/api/export/profit-split.csv'
+      : `/api/export/${kind}.csv?from=${from}&to=${to}`
+  ),
+
   authConfig: () => request('/api/auth/config'),
   me: () => request('/api/auth/me'),
   loginLocal: (name, email) => request('/api/auth/local', { method: 'POST', body: JSON.stringify({ name, email }) }),

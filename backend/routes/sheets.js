@@ -25,6 +25,15 @@ function todayISO() {
   return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`;
 }
 
+/** Records who did what to a sheet, and when — sheetDate is passed explicitly since a
+ * delete removes the row itself, and req.user is absent when auth is disabled. */
+function logAudit(req, { action, sheetId, sheetDate, detail }) {
+  db.prepare(`
+    INSERT INTO audit_log (action, sheet_id, sheet_date, actor_email, actor_name, detail)
+    VALUES (?, ?, ?, ?, ?, ?)
+  `).run(action, sheetId ?? null, sheetDate ?? null, req.user?.email ?? null, req.user?.name ?? null, detail ?? null);
+}
+
 function saveUploadedFile(file, sheetDate) {
   const ext = path.extname(file.originalname).toLowerCase() || '.bin';
   const name = `${sheetDate || 'undated'}-${Date.now()}${ext}`;
@@ -142,9 +151,9 @@ sheetsRouter.post('/upload', upload.single('file'), async (req, res) => {
     }
 
     const filePath = saveUploadedFile(req.file, sheetDate);
-    const sheetId = persistSheet({
-      extracted, sheetDate, source: isXlsx ? 'xlsx' : 'image', filePath, warnings,
-    });
+    const source = isXlsx ? 'xlsx' : 'image';
+    const sheetId = persistSheet({ extracted, sheetDate, source, filePath, warnings });
+    logAudit(req, { action: 'created', sheetId, sheetDate, detail: `Uploaded (${source})` });
 
     res.json({ sheetId, warnings });
   } catch (err) {
@@ -248,19 +257,34 @@ sheetsRouter.patch('/:id', adminGate, (req, res) => {
   db.prepare('UPDATE sheets SET meter_profit = ?, over_short = ?, validation_json = ? WHERE id = ?')
     .run(meterProfit, overShort, JSON.stringify(warnings), id);
 
+  const changedParts = [];
+  if (Object.keys(fields).length) changedParts.push(Object.keys(fields).join(', '));
+  if (Array.isArray(machines)) changedParts.push('machine readings');
+  if (Array.isArray(expenses)) changedParts.push('expenses');
+  logAudit(req, {
+    action: 'edited', sheetId: id, sheetDate: updated.sheet_date,
+    detail: changedParts.length ? `Changed: ${changedParts.join('; ')}` : null,
+  });
+
   res.json({ ok: true, meter_profit: meterProfit, over_short: overShort, warnings });
 });
 
 // POST /api/sheets/:id/verify (admin-only once auth is on)
 sheetsRouter.post('/:id/verify', adminGate, (req, res) => {
-  const result = db.prepare("UPDATE sheets SET status = 'verified' WHERE id = ?").run(Number(req.params.id));
+  const id = Number(req.params.id);
+  const result = db.prepare("UPDATE sheets SET status = 'verified' WHERE id = ?").run(id);
   if (!result.changes) return res.status(404).json({ error: 'Sheet not found' });
+  const sheet = db.prepare('SELECT sheet_date FROM sheets WHERE id = ?').get(id);
+  logAudit(req, { action: 'verified', sheetId: id, sheetDate: sheet?.sheet_date });
   res.json({ ok: true });
 });
 
 // DELETE /api/sheets/:id (admin-only once auth is on)
 sheetsRouter.delete('/:id', adminGate, (req, res) => {
-  const result = db.prepare('DELETE FROM sheets WHERE id = ?').run(Number(req.params.id));
-  if (!result.changes) return res.status(404).json({ error: 'Sheet not found' });
+  const id = Number(req.params.id);
+  const sheet = db.prepare('SELECT sheet_date FROM sheets WHERE id = ?').get(id);
+  if (!sheet) return res.status(404).json({ error: 'Sheet not found' });
+  db.prepare('DELETE FROM sheets WHERE id = ?').run(id);
+  logAudit(req, { action: 'deleted', sheetId: id, sheetDate: sheet.sheet_date });
   res.json({ ok: true });
 });

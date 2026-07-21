@@ -10,6 +10,8 @@ import { expensesRouter } from './routes/expenses.js';
 import { profitSplitRouter } from './routes/profitSplit.js';
 import { analyticsRouter } from './routes/analytics.js';
 import { authRouter, adminRouter } from './routes/auth.js';
+import { auditRouter } from './routes/audit.js';
+import { exportRouter } from './routes/export.js';
 import { requireAuth, requireApproved } from './auth.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
@@ -48,6 +50,8 @@ export function createApp() {
   app.use('/api/expenses', expensesRouter);
   app.use('/api/profit-split', profitSplitRouter);
   app.use('/api/analytics', analyticsRouter);
+  app.use('/api/audit', auditRouter);
+  app.use('/api/export', exportRouter);
 
   // Serve built frontend when it exists (production / local single-server mode)
   const dist = path.join(__dirname, '..', 'frontend', 'dist');

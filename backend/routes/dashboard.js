@@ -153,6 +153,20 @@ function alertsForRange(from, to, label) {
   return alerts;
 }
 
+// Flags a gap in daily uploads — independent of whatever range is being viewed, since
+// it's about real-world business continuity, not the historical window on screen.
+const MISSING_DAY_THRESHOLD = 2;
+export function missingDayAlert(latestDate) {
+  if (!latestDate) return null;
+  const today = new Date().toISOString().slice(0, 10);
+  const gap = daysBetween(latestDate, today) - 1;
+  if (gap < MISSING_DAY_THRESHOLD) return null;
+  return {
+    machine: null, level: gap >= 7 ? 'high' : 'medium',
+    message: `No sheet uploaded in ${gap} days — last upload was ${latestDate}`,
+  };
+}
+
 // GET /api/dashboard?from=YYYY-MM-DD&to=YYYY-MM-DD&label=...
 dashboardRouter.get('/', (req, res) => {
   const range = resolveRange(req);
@@ -240,13 +254,17 @@ dashboardRouter.get('/', (req, res) => {
 
   const latestDate = db.prepare('SELECT MAX(sheet_date) AS d FROM sheets').get().d;
 
+  const alerts = alertsForRange(range.from, range.to, range.label);
+  const missing = missingDayAlert(latestDate);
+  if (missing) alerts.unshift(missing);
+
   res.json({
     range: { from: range.from, to: range.to, label: range.label, allTime: range.allTime },
     totals,
     previous,
     chartGranularity: chartGran,
     buckets,
-    alerts: alertsForRange(range.from, range.to, range.label),
+    alerts,
     expenses,
     otherExpensesTotal: totals.other_expenses,
     deadMachines,

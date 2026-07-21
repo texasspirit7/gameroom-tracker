@@ -116,10 +116,24 @@ db.exec(`
     paid_by TEXT
   );
 
+  -- Who did what to a sheet, and when — sheet_id/sheet_date are kept even after a
+  -- delete (denormalized, not a foreign key) so the trail survives the sheet itself.
+  CREATE TABLE IF NOT EXISTS audit_log (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    action TEXT NOT NULL,                           -- 'created' | 'edited' | 'verified' | 'deleted'
+    sheet_id INTEGER,
+    sheet_date TEXT,
+    actor_email TEXT,
+    actor_name TEXT,
+    detail TEXT,
+    created_at TEXT NOT NULL DEFAULT (datetime('now'))
+  );
+
   CREATE INDEX IF NOT EXISTS idx_sheets_date ON sheets(sheet_date);
   CREATE INDEX IF NOT EXISTS idx_readings_sheet ON machine_readings(sheet_id);
   CREATE INDEX IF NOT EXISTS idx_readings_machine ON machine_readings(machine_number);
   CREATE INDEX IF NOT EXISTS idx_other_expenses_date ON other_expenses(expense_date);
+  CREATE INDEX IF NOT EXISTS idx_audit_log_created ON audit_log(created_at);
 `);
 
 // One-time data fix: the sheet's "FD" row (Family Dollar store) was previously

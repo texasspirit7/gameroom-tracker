@@ -103,6 +103,10 @@ tr.clickable { cursor: pointer; }
 .alert-item.medium { background: #fdf9f0; border-color: #f0e4c8; }
 .alert-item.low { background: #f2f7fd; border-color: #d9e6f7; }
 
+.activity-list { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 10px; font-size: 13px; }
+.activity-list li { padding-bottom: 10px; border-bottom: 1px solid var(--line); }
+.activity-list li:last-child { border-bottom: none; padding-bottom: 0; }
+
 button, .btn {
   display: inline-block;
   background: linear-gradient(135deg, var(--accent), var(--accent-2));

@@ -20,8 +20,9 @@ function monthsBetween(start, end) {
   return months;
 }
 
-/** GET /api/profit-split — one row per month since tracking began, most recent first. */
-profitSplitRouter.get('/', adminGate, (req, res) => {
+/** One row per month since tracking began, most recent first — shared by the
+ * GET route and the CSV export so both compute net profit/split the same way. */
+export function buildProfitSplitRows() {
   const meterByMonth = db.prepare(`
     SELECT strftime('%Y-%m', sheet_date) AS month, COALESCE(SUM(meter_profit), 0) AS mp
     FROM sheets GROUP BY month
@@ -44,7 +45,7 @@ profitSplitRouter.get('/', adminGate, (req, res) => {
   const paidByMonth = new Map(paidRows.map((r) => [r.month, r]));
 
   const months = [...netByMonth.keys()];
-  if (months.length === 0) return res.json([]);
+  if (months.length === 0) return [];
 
   const thisMonth = new Date().toISOString().slice(0, 7);
   const start = months.sort()[0];
@@ -67,7 +68,12 @@ profitSplitRouter.get('/', adminGate, (req, res) => {
   });
 
   rows.sort((a, b) => (a.month < b.month ? 1 : -1));
-  res.json(rows);
+  return rows;
+}
+
+/** GET /api/profit-split — one row per month since tracking began, most recent first. */
+profitSplitRouter.get('/', adminGate, (req, res) => {
+  res.json(buildProfitSplitRows());
 });
 
 /** PATCH /api/profit-split/:month  { paid?: boolean, notes?: string } — either field independently. */

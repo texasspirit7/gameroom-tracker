@@ -11,6 +11,7 @@ export default function Dashboard() {
   const { from, to, label, preset } = useDateRange();
   const [data, setData] = useState(null);
   const [error, setError] = useState(null);
+  const [audit, setAudit] = useState(null);
 
   useEffect(() => {
     setData(null);
@@ -19,6 +20,8 @@ export default function Dashboard() {
       : `?from=${from}&to=${to}&label=${encodeURIComponent(label)}`;
     api.dashboard(params).then(setData).catch((e) => setError(e.message));
   }, [from, to, label, preset]);
+
+  useEffect(() => { api.auditLog(15).then(setAudit).catch(() => setAudit([])); }, []);
 
   if (error) return <div className="error-box">{error}</div>;
   if (!data) return <p className="muted"><span className="spinner" />Loading dashboard…</p>;
@@ -143,8 +146,62 @@ export default function Dashboard() {
           </p>
         </div>
       )}
+
+      <div className="grid-2">
+        <div className="panel">
+          <h2>Export</h2>
+          <p className="muted" style={{ fontSize: 12, marginTop: 0 }}>
+            Downloads data for the current range ({range.label}) as CSV.
+          </p>
+          <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap' }}>
+            <a className="btn secondary" href={api.exportUrl('sheets', from, to)} download>Sheets CSV</a>
+            <a className="btn secondary" href={api.exportUrl('expenses', from, to)} download>Expenses CSV</a>
+            <a className="btn secondary" href={api.exportUrl('profit-split')} download>Profit Split CSV</a>
+          </div>
+        </div>
+
+        <div className="panel">
+          <h2>Recent Activity</h2>
+          {!audit ? (
+            <p className="muted"><span className="spinner" />Loading…</p>
+          ) : audit.length === 0 ? (
+            <p className="muted" style={{ margin: 0 }}>No activity recorded yet.</p>
+          ) : (
+            <ul className="activity-list">
+              {audit.map((a) => (
+                <li key={a.id}>
+                  <strong>{ACTION_LABEL[a.action] || a.action}</strong>{' '}
+                  {a.action !== 'deleted' && a.sheet_id ? (
+                    <Link to={`/sheets/${a.sheet_id}`}>sheet {a.sheet_date}</Link>
+                  ) : (
+                    <>sheet {a.sheet_date}</>
+                  )}
+                  {' — '}{a.actor_name || a.actor_email || 'someone'}
+                  <span className="muted" style={{ fontSize: 11 }}> · {relativeTime(a.created_at)}</span>
+                  {a.detail && <div className="muted" style={{ fontSize: 11 }}>{a.detail}</div>}
+                </li>
+              ))}
+            </ul>
+          )}
+        </div>
+      </div>
     </>
   );
+}
+
+const ACTION_LABEL = { created: 'Uploaded', edited: 'Edited', verified: 'Verified', deleted: 'Deleted' };
+
+// SQLite's datetime('now') stores UTC as "YYYY-MM-DD HH:MM:SS" with no timezone marker —
+// without an explicit "Z", Date() would parse it as local time and skew the diff.
+function relativeTime(sqliteUtc) {
+  const diffMs = Date.now() - new Date(`${sqliteUtc.replace(' ', 'T')}Z`).getTime();
+  const mins = Math.round(diffMs / 60000);
+  if (mins < 1) return 'just now';
+  if (mins < 60) return `${mins}m ago`;
+  const hours = Math.round(mins / 60);
+  if (hours < 24) return `${hours}h ago`;
+  const days = Math.round(hours / 24);
+  return `${days}d ago`;
 }
 
 function Card({ label, value, tone, delta, invert }) {
