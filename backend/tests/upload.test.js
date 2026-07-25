@@ -25,8 +25,6 @@ async function uploadXlsx(baseUrl, cookie, buffer, sheetDate) {
   return fetch(`${baseUrl}/api/sheets/upload`, { method: 'POST', headers: { Cookie: cookie }, body: form });
 }
 
-const todayISO = () => new Date().toISOString().slice(0, 10);
-
 // One shared server for the whole file — Node caches ES modules per process,
 // so a second startTestServer() call here would silently reuse (and, after
 // an earlier block's teardown, find *closed*) the same db.js singleton rather
@@ -104,12 +102,14 @@ describe('POST /api/sheets/upload — auto-detected sheet_date priority', () => 
     assert.equal(sheet.sheet_date, '2026-04-01');
   });
 
-  test('no sheet_date and no printed date falls back to today', async () => {
+  test('no sheet_date and no printed date defaults to the day after the last sheet on record, with a warning', async () => {
+    // The previous test in this block left 2026-04-01 as the last sheet uploaded.
     const buf = buildSheetXlsx([[1, 0, 100, 100, 0, 50, 50, '50%']]);
     const res = await uploadXlsx(ctx.baseUrl, cookie, buf, null);
     assert.equal(res.status, 200);
-    const { sheetId } = await res.json();
+    const { sheetId, warnings } = await res.json();
+    assert.ok(warnings.some((w) => w.includes('No date found on this sheet')), 'expected a guessed-date warning');
     const sheet = await (await fetch(`${ctx.baseUrl}/api/sheets/${sheetId}`, { headers: { Cookie: cookie } })).json();
-    assert.equal(sheet.sheet_date, todayISO());
+    assert.equal(sheet.sheet_date, '2026-04-02');
   });
 });

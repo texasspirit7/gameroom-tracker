@@ -25,6 +25,24 @@ function todayISO() {
   return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`;
 }
 
+function addDaysISO(iso, delta) {
+  const d = new Date(`${iso}T00:00:00Z`);
+  d.setUTCDate(d.getUTCDate() + delta);
+  return d.toISOString().slice(0, 10);
+}
+
+/**
+ * Priority: an explicit sheet_date from the form (manual override) > the date auto-extracted
+ * from the sheet itself > a guess. The guess is the day after the last sheet on record, not
+ * "today" — sheets are routinely uploaded a day (or more) late, so "today" is very often wrong
+ * for exactly the sheets that need a fallback (no date field, or extraction couldn't read it).
+ */
+export function resolveSheetDate({ providedDate, extractedDate, lastSheetDate, today }) {
+  if (providedDate && DATE_RE.test(providedDate)) return { date: providedDate, guessed: false };
+  if (extractedDate) return { date: extractedDate, guessed: false };
+  return { date: lastSheetDate ? addDaysISO(lastSheetDate, 1) : today, guessed: true };
+}
+
 /** Records who did what to a sheet, and when — sheetDate is passed explicitly since a
  * delete removes the row itself, and req.user is absent when auth is disabled. */
 function logAudit(req, { action, sheetId, sheetDate, detail }) {
@@ -116,7 +134,7 @@ function persistSheet({ extracted, sheetDate, source, filePath, warnings }) {
   return sheetId;
 }
 
-// POST /api/sheets/upload  (multipart: file, sheet_date? — auto-detected from the sheet if omitted, else today)
+// POST /api/sheets/upload  (multipart: file, sheet_date? — auto-detected from the sheet if omitted, else guessed)
 sheetsRouter.post('/upload', upload.single('file'), async (req, res) => {
   try {
     if (!req.file) return res.status(400).json({ error: 'No file uploaded' });
@@ -132,14 +150,22 @@ sheetsRouter.post('/upload', upload.single('file'), async (req, res) => {
       ? extractFromXlsx(req.file.buffer)
       : await extractFromImage(req.file.buffer);
 
-    // Priority: an explicit sheet_date from the form (manual override) > the date
-    // auto-extracted from the sheet itself > today, as a last resort if neither is available.
-    const providedDate = req.body.sheet_date;
-    const sheetDate = (providedDate && DATE_RE.test(providedDate))
-      ? providedDate
-      : (extracted.sheet_date || todayISO());
+    const lastSheet = db.prepare('SELECT sheet_date FROM sheets ORDER BY id DESC LIMIT 1').get();
+    const { date: sheetDate, guessed } = resolveSheetDate({
+      providedDate: req.body.sheet_date,
+      extractedDate: extracted.sheet_date,
+      lastSheetDate: lastSheet?.sheet_date,
+      today: todayISO(),
+    });
 
     const { warnings } = validateSheet({ sheetDate, machines: extracted.machines, totals: extracted.totals });
+    if (guessed) {
+      warnings.unshift(
+        lastSheet
+          ? `No date found on this sheet — defaulted to ${sheetDate}, the day after the last sheet on record (${lastSheet.sheet_date}). Verify this is correct and edit it on the sheet's page if not.`
+          : `No date found on this sheet — defaulted to today (${sheetDate}), since there are no prior sheets to guess from. Verify this is correct and edit it on the sheet's page if not.`
+      );
+    }
 
     // Multiple sheets per date are allowed (e.g. separate shifts) — just flag it,
     // don't block the upload.
