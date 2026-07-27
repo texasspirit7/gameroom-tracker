@@ -6,9 +6,12 @@ import {
 } from 'recharts';
 import { api, fmt, signedMoney } from '../api.js';
 import { useDateRange } from '../DateRangeContext.jsx';
+import { useAuth } from '../AuthContext.jsx';
 
 export default function Dashboard() {
   const { from, to, label, preset } = useDateRange();
+  const { isAdmin, authEnabled } = useAuth();
+  const canModify = !authEnabled || isAdmin;
   const [data, setData] = useState(null);
   const [error, setError] = useState(null);
   const [audit, setAudit] = useState(null);
@@ -179,6 +182,8 @@ export default function Dashboard() {
             <a className="btn secondary" href={api.exportUrl('expenses', from, to)} download>Expenses CSV</a>
             <a className="btn secondary" href={api.exportUrl('profit-split')} download>Profit Split CSV</a>
           </div>
+
+          {canModify && <BackupsSection />}
         </div>
 
         <div className="panel">
@@ -216,6 +221,59 @@ export default function Dashboard() {
         </div>
       </div>
     </>
+  );
+}
+
+/** Admin-only: the nightly database snapshots, with an on-demand button and download links. */
+function BackupsSection() {
+  const [backups, setBackups] = useState(null);
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState(null);
+
+  const load = () => api.backups().then(setBackups).catch((e) => setError(e.message));
+  useEffect(() => { load(); }, []);
+
+  const backUpNow = async () => {
+    setBusy(true);
+    setError(null);
+    try {
+      await api.createBackup();
+      await load();
+    } catch (e) {
+      setError(e.message);
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  const latest = backups?.[0];
+
+  return (
+    <div style={{ marginTop: 18, borderTop: '1px solid var(--line)', paddingTop: 14 }}>
+      <div style={{ display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap' }}>
+        <strong style={{ fontSize: 13 }}>Database backups</strong>
+        <button className="secondary row-action" onClick={backUpNow} disabled={busy}>
+          {busy ? 'Backing up…' : 'Back up now'}
+        </button>
+      </div>
+      {error && <div className="error-box" style={{ marginTop: 10 }}>{error}</div>}
+      <p className="muted" style={{ fontSize: 12, margin: '8px 0 0' }}>
+        {!backups
+          ? 'Loading…'
+          : latest
+            ? <>Runs nightly, keeping the last 14. Latest: {new Date(latest.created_at).toLocaleString()} ({Math.round(latest.size / 1024)} KB).</>
+            : 'No snapshots yet — the first one is written shortly after the server starts.'}
+      </p>
+      {backups && backups.length > 0 && (
+        <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', marginTop: 8 }}>
+          {backups.slice(0, 3).map((b) => (
+            <a key={b.name} className="btn secondary row-action" href={api.backupUrl(b.name)} download>
+              {b.created_at.slice(0, 10)}
+            </a>
+          ))}
+        </div>
+      )}
+    </div>
   );
 }
 

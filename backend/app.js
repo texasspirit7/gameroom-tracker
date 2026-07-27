@@ -12,6 +12,7 @@ import { analyticsRouter } from './routes/analytics.js';
 import { authRouter, adminRouter } from './routes/auth.js';
 import { auditRouter } from './routes/audit.js';
 import { exportRouter } from './routes/export.js';
+import { backupsRouter } from './routes/backups.js';
 import { requireAuth, requireApproved } from './auth.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
@@ -52,6 +53,7 @@ export function createApp() {
   app.use('/api/analytics', analyticsRouter);
   app.use('/api/audit', auditRouter);
   app.use('/api/export', exportRouter);
+  app.use('/api/backups', backupsRouter);
 
   // Serve built frontend when it exists (production / local single-server mode)
   const dist = path.join(__dirname, '..', 'frontend', 'dist');

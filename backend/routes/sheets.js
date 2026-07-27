@@ -31,16 +31,48 @@ function addDaysISO(iso, delta) {
   return d.toISOString().slice(0, 10);
 }
 
+const daysBetweenISO = (a, b) => Math.round((Date.parse(`${b}T00:00:00Z`) - Date.parse(`${a}T00:00:00Z`)) / 86400000);
+
+// Sanity bounds for an auto-extracted date. A vision misread produces a well-formed but wrong
+// date (transposed digits, wrong year) that the YYYY-MM-DD shape check in normalizeSheetDate()
+// can't catch.
+//
+// Only a *future* date is rejected outright — a sheet recording a day's takings genuinely
+// cannot be dated ahead of today, so that reading is impossible rather than merely odd. A very
+// old date is only flagged: it's equally consistent with a wrong-year misread and with somebody
+// legitimately backfilling a months-old sheet, and silently replacing a date that was physically
+// printed on the document is the same failure this validation exists to prevent.
+const FUTURE_TOLERANCE_DAYS = 1;   // a sheet dated tomorrow is possible across a timezone edge
+const PAST_SUSPICIOUS_DAYS = 60;   // older than this is worth a second look, but not a rejection
+
 /**
  * Priority: an explicit sheet_date from the form (manual override) > the date auto-extracted
  * from the sheet itself > a guess. The guess is the day after the last sheet on record, not
  * "today" — sheets are routinely uploaded a day (or more) late, so "today" is very often wrong
  * for exactly the sheets that need a fallback (no date field, or extraction couldn't read it).
+ *
+ * A manually-typed date is always taken at face value — backfilling an old sheet is legitimate
+ * and the person typing it knows more than we do. Only auto-extracted dates get sanity-checked.
+ *
+ * Returns { date, source, rejectedDate?, suspiciouslyOld? } where source is
+ * 'manual' | 'extracted' | 'guessed'.
  */
 export function resolveSheetDate({ providedDate, extractedDate, lastSheetDate, today }) {
-  if (providedDate && DATE_RE.test(providedDate)) return { date: providedDate, guessed: false };
-  if (extractedDate) return { date: extractedDate, guessed: false };
-  return { date: lastSheetDate ? addDaysISO(lastSheetDate, 1) : today, guessed: true };
+  const guess = () => (lastSheetDate ? addDaysISO(lastSheetDate, 1) : today);
+
+  if (providedDate && DATE_RE.test(providedDate)) return { date: providedDate, source: 'manual' };
+
+  if (extractedDate) {
+    const daysAhead = daysBetweenISO(today, extractedDate);
+    if (daysAhead > FUTURE_TOLERANCE_DAYS) {
+      return { date: guess(), source: 'guessed', rejectedDate: extractedDate };
+    }
+    const result = { date: extractedDate, source: 'extracted' };
+    if (-daysAhead > PAST_SUSPICIOUS_DAYS) result.suspiciouslyOld = -daysAhead;
+    return result;
+  }
+
+  return { date: guess(), source: 'guessed' };
 }
 
 /** Records who did what to a sheet, and when — sheetDate is passed explicitly since a
@@ -151,7 +183,8 @@ sheetsRouter.post('/upload', upload.single('file'), async (req, res) => {
       : await extractFromImage(req.file.buffer);
 
     const lastSheet = db.prepare('SELECT sheet_date FROM sheets ORDER BY id DESC LIMIT 1').get();
-    const { date: sheetDate, guessed } = resolveSheetDate({
+    const latestDate = db.prepare('SELECT MAX(sheet_date) AS d FROM sheets').get().d;
+    const { date: sheetDate, source: dateSource, rejectedDate, suspiciouslyOld } = resolveSheetDate({
       providedDate: req.body.sheet_date,
       extractedDate: extracted.sheet_date,
       lastSheetDate: lastSheet?.sheet_date,
@@ -159,11 +192,31 @@ sheetsRouter.post('/upload', upload.single('file'), async (req, res) => {
     });
 
     const { warnings } = validateSheet({ sheetDate, machines: extracted.machines, totals: extracted.totals });
-    if (guessed) {
+
+    if (suspiciouslyOld) {
+      warnings.unshift(
+        `The date read off this sheet (${sheetDate}) is ${suspiciouslyOld} days old. That's expected if ` +
+        `you're backfilling — otherwise it may be a misread year or month, so check it before verifying.`
+      );
+    }
+
+    if (dateSource === 'guessed') {
+      const why = rejectedDate
+        ? `The date read off this sheet (${rejectedDate}) is in the future, which isn't possible — treated as a misread and discarded.`
+        : 'No date found on this sheet.';
       warnings.unshift(
         lastSheet
-          ? `No date found on this sheet — defaulted to ${sheetDate}, the day after the last sheet on record (${lastSheet.sheet_date}). Verify this is correct and edit it on the sheet's page if not.`
-          : `No date found on this sheet — defaulted to today (${sheetDate}), since there are no prior sheets to guess from. Verify this is correct and edit it on the sheet's page if not.`
+          ? `${why} Defaulted to ${sheetDate}, the day after the last sheet on record (${lastSheet.sheet_date}). Verify this is correct and edit it on the sheet's page if not.`
+          : `${why} Defaulted to today (${sheetDate}), since there are no prior sheets to guess from. Verify this is correct and edit it on the sheet's page if not.`
+      );
+    }
+
+    // A date earlier than everything already on record is legitimate when backfilling, but it's
+    // also exactly what a transposed month/day misread looks like — so flag it either way.
+    if (latestDate && sheetDate < latestDate) {
+      warnings.unshift(
+        `This sheet is dated ${sheetDate}, which is earlier than the most recent sheet on record (${latestDate}). ` +
+        `That's expected if you're backfilling — otherwise check the date is right.`
       );
     }
 
@@ -203,6 +256,46 @@ sheetsRouter.get('/', (req, res) => {
     warnings: JSON.parse(s.validation_json || '[]').length,
     net_profit: s.meter_profit - s.expenses,
   })));
+});
+
+/**
+ * GET /api/sheets/coverage — calendar days with no sheet, bucketed by month.
+ *
+ * Deliberately only reports gaps *between* the first and last sheet on record. Days before
+ * tracking started, and the rest of the current month that hasn't happened yet, aren't gaps.
+ * The span is computed globally rather than per month so a gap straddling a month boundary
+ * (last sheet Jul 31, next one Aug 3) is still caught.
+ *
+ * Registered before '/:id' — otherwise Express matches "coverage" as an id.
+ */
+sheetsRouter.get('/coverage', (req, res) => {
+  const dates = db.prepare('SELECT DISTINCT sheet_date FROM sheets ORDER BY sheet_date').all().map((r) => r.sheet_date);
+  if (dates.length < 2) {
+    return res.json({ from: dates[0] ?? null, to: dates[0] ?? null, missing_total: 0, months: [] });
+  }
+
+  const have = new Set(dates);
+  const from = dates[0];
+  const to = dates[dates.length - 1];
+
+  const byMonth = new Map();
+  let total = 0;
+  for (let d = addDaysISO(from, 1); d < to; d = addDaysISO(d, 1)) {
+    if (have.has(d)) continue;
+    const month = d.slice(0, 7);
+    if (!byMonth.has(month)) byMonth.set(month, []);
+    byMonth.get(month).push(d);
+    total += 1;
+  }
+
+  res.json({
+    from,
+    to,
+    missing_total: total,
+    months: [...byMonth.entries()]
+      .map(([month, missing]) => ({ month, missing }))
+      .sort((a, b) => (a.month < b.month ? 1 : -1)),
+  });
 });
 
 // GET /api/sheets/:id/file — download the originally uploaded image/pdf/xlsx

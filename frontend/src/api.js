@@ -21,6 +21,7 @@ export const api = {
   machinesMeta: () => request('/api/machines/meta'),
   machine: (n) => request(`/api/machines/${n}`),
   sheets: () => request('/api/sheets'),
+  sheetsCoverage: () => request('/api/sheets/coverage'),
   sheet: (id) => request(`/api/sheets/${id}`),
   uploadSheet: (file, sheetDate) => {
     const form = new FormData();
@@ -37,6 +38,9 @@ export const api = {
   deleteExpense: (id) => request(`/api/expenses/${id}`, { method: 'DELETE' }),
 
   auditLog: (limit = 15) => request(`/api/audit?limit=${limit}`),
+  backups: () => request('/api/backups'),
+  createBackup: () => request('/api/backups', { method: 'POST' }),
+  backupUrl: (name) => `/api/backups/${encodeURIComponent(name)}`,
   exportUrl: (kind, from, to) => (
     kind === 'profit-split'
       ? '/api/export/profit-split.csv'

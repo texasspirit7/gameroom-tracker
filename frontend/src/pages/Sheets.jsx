@@ -40,13 +40,22 @@ export default function Sheets() {
   const { isAdmin, authEnabled } = useAuth();
   const canModify = !authEnabled || isAdmin;
   const [sheets, setSheets] = useState(null);
+  const [coverage, setCoverage] = useState(null);
   const [error, setError] = useState(null);
   // Defaults to the current calendar month — expanded automatically, every other month starts collapsed.
   const [expandedMonth, setExpandedMonth] = useState(currentMonthKey);
   const navigate = useNavigate();
 
-  const load = () => api.sheets().then(setSheets).catch((e) => setError(e.message));
+  const load = () => Promise.all([api.sheets(), api.sheetsCoverage()])
+    .then(([list, cov]) => { setSheets(list); setCoverage(cov); })
+    .catch((e) => setError(e.message));
   useEffect(() => { load(); }, []);
+
+  // month key -> array of dates with no sheet, for the Gaps column
+  const missingByMonth = useMemo(
+    () => new Map((coverage?.months ?? []).map((m) => [m.month, m.missing])),
+    [coverage]
+  );
 
   const remove = async (e, sheet) => {
     e.stopPropagation();
@@ -74,7 +83,7 @@ export default function Sheets() {
               <tr>
                 <th>Month</th><th>Sheets</th><th>Total In</th><th>Total Out</th>
                 <th>Match</th><th>Expenses</th><th>Meter Profit</th><th>Net Profit (After Overhead)</th>
-                <th>Warnings</th>
+                <th>Warnings</th><th title="Days with no sheet, between the first and last sheet on record">Gaps</th>
               </tr>
             </thead>
             <tbody>
@@ -90,10 +99,26 @@ export default function Sheets() {
                     <td className={g.meter_profit >= 0 ? 'pos' : 'neg'}>{signedMoney(g.meter_profit)}</td>
                     <td className={g.net_profit >= 0 ? 'pos' : 'neg'}>{signedMoney(g.net_profit)}</td>
                     <td>{g.warnings > 0 ? <span className="badge review">{g.warnings}</span> : '—'}</td>
+                    <td>
+                      {missingByMonth.get(g.key)?.length
+                        ? <span className="badge high">{missingByMonth.get(g.key).length}</span>
+                        : '—'}
+                    </td>
                   </tr>
                   {expandedMonth === g.key && (
                     <tr>
-                      <td colSpan={9} style={{ background: '#f7f9fd' }}>
+                      <td colSpan={10} style={{ background: '#f7f9fd' }}>
+                        {missingByMonth.get(g.key)?.length > 0 && (
+                          <div className="warning-box" style={{ margin: '8px 0 0' }}>
+                            <strong>
+                              ⚠ {missingByMonth.get(g.key).length} day
+                              {missingByMonth.get(g.key).length === 1 ? '' : 's'} with no sheet
+                            </strong>
+                            <div style={{ marginTop: 6 }}>
+                              {missingByMonth.get(g.key).map((d) => `${d} (${weekday(d)})`).join(' · ')}
+                            </div>
+                          </div>
+                        )}
                         <table style={{ margin: '8px 0' }}>
                           <thead>
                             <tr>
