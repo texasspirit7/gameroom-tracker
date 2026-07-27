@@ -60,9 +60,12 @@ body {
 .card {
   background: var(--panel); border-radius: var(--radius); box-shadow: var(--shadow);
   padding: 16px 18px; border-top: 3px solid var(--accent);
+  transition: transform 0.15s ease, box-shadow 0.15s ease;
 }
+.card:hover { transform: translateY(-2px); box-shadow: 0 2px 6px rgba(20,30,60,0.1), 0 10px 24px rgba(20,30,60,0.09); }
 .card .label { font-size: 12px; color: var(--muted); text-transform: uppercase; letter-spacing: 0.04em; }
-.card .value { font-size: 24px; font-weight: 700; margin-top: 6px; }
+/* tabular-nums keeps the stat row's digits on a shared grid, so figures line up column to column */
+.card .value { font-size: 24px; font-weight: 700; margin-top: 6px; font-variant-numeric: tabular-nums; }
 .card.good { border-top-color: var(--good); }
 .card.bad { border-top-color: var(--bad); }
 .value.good, .pos { color: var(--good); }
@@ -76,6 +79,8 @@ body {
 }
 .panel h2 { margin: 0 0 14px; font-size: 15px; display: flex; align-items: center; gap: 8px; }
 .panel h2::before { content: ''; width: 4px; height: 16px; border-radius: 2px; background: linear-gradient(180deg, var(--accent), var(--accent-2)); }
+/* Secondary count/hint sitting beside a panel title, e.g. "24 logged · scroll for more" */
+.panel-count { margin-left: auto; font-size: 11px; font-weight: 500; color: var(--muted); white-space: nowrap; }
 
 table { width: 100%; border-collapse: collapse; font-size: 13px; }
 th { text-align: right; padding: 8px 10px; color: var(--muted); font-weight: 600; border-bottom: 2px solid var(--line); white-space: nowrap; }
@@ -107,6 +112,20 @@ tr.clickable { cursor: pointer; }
 .activity-list li { padding-bottom: 10px; border-bottom: 1px solid var(--line); }
 .activity-list li:last-child { border-bottom: none; padding-bottom: 0; }
 
+/* Only the rows past the visible cap scroll — max-height is measured in Dashboard.jsx,
+   since rows vary in height depending on whether they carry a detail line. */
+.activity-list.scrollable {
+  overflow-y: auto;
+  padding-right: 12px;
+  overscroll-behavior: contain;
+  scrollbar-width: thin;
+  scrollbar-color: #c3d0e4 transparent;
+}
+.activity-list.scrollable::-webkit-scrollbar { width: 8px; }
+.activity-list.scrollable::-webkit-scrollbar-track { background: transparent; }
+.activity-list.scrollable::-webkit-scrollbar-thumb { background: #c3d0e4; border-radius: 999px; }
+.activity-list.scrollable::-webkit-scrollbar-thumb:hover { background: #a8bad6; }
+
 button, .btn {
   display: inline-block;
   background: linear-gradient(135deg, var(--accent), var(--accent-2));
@@ -125,6 +144,13 @@ input, select {
   font-size: 14px; background: #fff; color: var(--ink);
 }
 input:focus { outline: 2px solid rgba(15,109,209,0.3); }
+
+/* Keyboard focus ring. :where() keeps specificity at zero so it never fights component
+   styles, and :focus-visible means mouse clicks don't leave a ring behind. */
+:where(button, .btn, a, select, textarea, [tabindex], tr.clickable):focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
 input.cell { width: 90px; padding: 4px 6px; font-size: 12px; text-align: right; }
 
 .dropzone {
@@ -280,6 +306,22 @@ input.cell { width: 90px; padding: 4px 6px; font-size: 12px; text-align: right; 
 }
 @media (prefers-reduced-motion: reduce) {
   .light-bulb { animation: none; }
+  .card, .dropzone, .sidebar { transition: none; }
+  .card:hover { transform: none; }
+  .activity-list.scrollable { scroll-behavior: auto; }
+}
+
+/* ---------- Tablet ---------- */
+/* Between the mobile breakpoint (860px) and a comfortable desktop width the sidebar still
+   takes its full 220px, leaving the content column cramped — tighten the gutters and stat
+   cards through this band rather than letting figures wrap mid-number. */
+@media (min-width: 861px) and (max-width: 1100px) {
+  .content { padding: 24px 20px; }
+  .cards { grid-template-columns: repeat(auto-fit, minmax(148px, 1fr)); gap: 12px; }
+  .card { padding: 14px 15px; }
+  .card .value { font-size: 21px; }
+  .panel { padding: 18px 16px; }
+  .grid-2 { gap: 16px; }
 }
 
 /* Faint casino iconography scattered behind page content */

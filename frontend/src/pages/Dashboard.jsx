@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useLayoutEffect, useRef, useState } from 'react';
 import { Link } from 'react-router-dom';
 import {
   ResponsiveContainer, LineChart, Line, BarChart, Bar, XAxis, YAxis,
@@ -12,6 +12,8 @@ export default function Dashboard() {
   const [data, setData] = useState(null);
   const [error, setError] = useState(null);
   const [audit, setAudit] = useState(null);
+  const [activityMaxH, setActivityMaxH] = useState(null);
+  const activityRef = useRef(null);
 
   useEffect(() => {
     setData(null);
@@ -21,7 +23,26 @@ export default function Dashboard() {
     api.dashboard(params).then(setData).catch((e) => setError(e.message));
   }, [from, to, label, preset]);
 
-  useEffect(() => { api.auditLog(15).then(setAudit).catch(() => setAudit([])); }, []);
+  // Pulled deeper than what's visible — the list shows ACTIVITY_VISIBLE rows and scrolls for the rest.
+  useEffect(() => { api.auditLog(50).then(setAudit).catch(() => setAudit([])); }, []);
+
+  // Cap the activity list at exactly ACTIVITY_VISIBLE rows. Measured rather than a fixed
+  // pixel height because rows are variable — an entry with a `detail` line is taller than one
+  // without. offsetTop is used (not getBoundingClientRect) so re-measuring stays correct even
+  // when the list is already scrolled.
+  useLayoutEffect(() => {
+    const el = activityRef.current;
+    if (!el) return undefined;
+    const measure = () => {
+      const items = el.children;
+      if (items.length <= ACTIVITY_VISIBLE) { setActivityMaxH(null); return; }
+      const last = items[ACTIVITY_VISIBLE - 1];
+      setActivityMaxH(last.offsetTop + last.offsetHeight - items[0].offsetTop);
+    };
+    measure();
+    window.addEventListener('resize', measure);
+    return () => window.removeEventListener('resize', measure);
+  }, [audit]);
 
   if (error) return <div className="error-box">{error}</div>;
   if (!data) return <p className="muted"><span className="spinner" />Loading dashboard…</p>;
@@ -161,13 +182,22 @@ export default function Dashboard() {
         </div>
 
         <div className="panel">
-          <h2>Recent Activity</h2>
+          <h2>
+            Recent Activity
+            {audit && audit.length > ACTIVITY_VISIBLE && (
+              <span className="panel-count">{audit.length} logged · scroll for more</span>
+            )}
+          </h2>
           {!audit ? (
             <p className="muted"><span className="spinner" />Loading…</p>
           ) : audit.length === 0 ? (
             <p className="muted" style={{ margin: 0 }}>No activity recorded yet.</p>
           ) : (
-            <ul className="activity-list">
+            <ul
+              className={`activity-list${activityMaxH ? ' scrollable' : ''}`}
+              ref={activityRef}
+              style={activityMaxH ? { maxHeight: activityMaxH } : undefined}
+            >
               {audit.map((a) => (
                 <li key={a.id}>
                   <strong>{ACTION_LABEL[a.action] || a.action}</strong>{' '}
@@ -190,6 +220,9 @@ export default function Dashboard() {
 }
 
 const ACTION_LABEL = { created: 'Uploaded', edited: 'Edited', verified: 'Verified', deleted: 'Deleted' };
+
+/** How many activity rows stay visible before the list starts scrolling. */
+const ACTIVITY_VISIBLE = 4;
 
 // SQLite's datetime('now') stores UTC as "YYYY-MM-DD HH:MM:SS" with no timezone marker —
 // without an explicit "Z", Date() would parse it as local time and skew the diff.
