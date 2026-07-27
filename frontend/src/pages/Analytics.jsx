@@ -4,6 +4,7 @@ import {
   ResponsiveContainer, BarChart, Bar, LineChart, Line, XAxis, YAxis, Tooltip, CartesianGrid, Cell, ReferenceLine, Legend,
 } from 'recharts';
 import { api, fmt, signedMoney } from '../api.js';
+import { CHART, axisProps, tooltipProps } from '../chartTheme.js';
 
 // The six metrics selectable from the dropdown at the top of the page — every section below
 // reflects whichever one is selected. Same set as the Dashboard's "Profit trend by day" chart.
@@ -69,14 +70,14 @@ function PeriodSection({ title, columnLabel, description, fetchSummary, fetchMac
         <>
           <ResponsiveContainer width="100%" height={220}>
             <BarChart data={rows} margin={{ top: 6, right: 16, left: 0, bottom: 0 }}>
-              <CartesianGrid strokeDasharray="3 3" stroke="#e4e8f0" />
-              <XAxis dataKey="label" fontSize={12} />
-              <YAxis fontSize={12} />
-              <Tooltip formatter={(v) => `$${fmt(v)}`} />
-              <ReferenceLine y={0} stroke="#999" />
+              <CartesianGrid strokeDasharray="3 3" stroke={CHART.grid} />
+              <XAxis dataKey="label" {...axisProps} />
+              <YAxis {...axisProps} />
+              <Tooltip formatter={(v) => `$${fmt(v)}`} {...tooltipProps} />
+              <ReferenceLine y={0} stroke={CHART.zero} />
               <Bar dataKey={metric.field} name={`Avg ${metric.label}`} radius={[3, 3, 0, 0]} onClick={select} cursor="pointer">
                 {rows.map((r) => (
-                  <Cell key={r.key} fill={metric.neutral ? '#0f6dd1' : r[metric.field] >= 0 ? '#16803c' : '#c22f2f'} />
+                  <Cell key={r.key} fill={metric.neutral ? CHART.totalIn : r[metric.field] >= 0 ? CHART.good : CHART.bad} />
                 ))}
               </Bar>
             </BarChart>
@@ -98,7 +99,7 @@ function PeriodSection({ title, columnLabel, description, fetchSummary, fetchMac
                   </tr>
                   {selectedKey === r.key && (
                     <tr>
-                      <td colSpan={3} style={{ background: '#f7f9fd' }}>
+                      <td colSpan={3} style={{ background: 'var(--sunk)' }}>
                         {machinesLoading ? (
                           <p className="muted" style={{ margin: '10px 0' }}><span className="spinner" />Loading machine averages…</p>
                         ) : machines.length === 0 ? (
@@ -172,14 +173,14 @@ function TrendSection() {
           </p>
           <ResponsiveContainer width="100%" height={240}>
             <LineChart data={chartData} margin={{ top: 6, right: 16, left: 0, bottom: 0 }}>
-              <CartesianGrid strokeDasharray="3 3" stroke="#e4e8f0" />
-              <XAxis dataKey="label" fontSize={12} />
-              <YAxis fontSize={12} />
-              <Tooltip formatter={(v) => `$${fmt(v)}`} />
+              <CartesianGrid strokeDasharray="3 3" stroke={CHART.grid} />
+              <XAxis dataKey="label" {...axisProps} />
+              <YAxis {...axisProps} />
+              <Tooltip formatter={(v) => `$${fmt(v)}`} {...tooltipProps} />
               <Legend />
-              <ReferenceLine y={0} stroke="#999" />
-              <Line type="monotone" dataKey="net_profit" name="Daily Net Profit" stroke="#9db6d8" strokeWidth={1.5} dot={{ r: 2 }} />
-              <Line type="monotone" dataKey="moving_avg" name="7-day Avg" stroke="#0f6dd1" strokeWidth={2.5} dot={false} />
+              <ReferenceLine y={0} stroke={CHART.zero} />
+              <Line type="monotone" dataKey="net_profit" name="Daily Net Profit" stroke={CHART.totalOut} strokeWidth={1.5} dot={{ r: 2 }} />
+              <Line type="monotone" dataKey="moving_avg" name="7-day Avg" stroke={CHART.totalIn} strokeWidth={2.5} dot={false} />
             </LineChart>
           </ResponsiveContainer>
         </>

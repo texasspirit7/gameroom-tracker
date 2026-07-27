@@ -5,6 +5,7 @@ import {
   Tooltip, Legend, CartesianGrid, ReferenceLine,
 } from 'recharts';
 import { api, fmt, signedMoney } from '../api.js';
+import { CHART, axisProps, tooltipProps } from '../chartTheme.js';
 
 export default function MachineDetail() {
   const { number } = useParams();
@@ -79,15 +80,15 @@ export default function MachineDetail() {
         {series.length ? (
           <ResponsiveContainer width="100%" height={300}>
             <ComposedChart data={series}>
-              <CartesianGrid strokeDasharray="3 3" stroke="#e4e8f0" />
-              <XAxis dataKey="label" fontSize={12} />
-              <YAxis fontSize={12} />
-              <Tooltip formatter={(v) => `$${fmt(v)}`} />
+              <CartesianGrid strokeDasharray="3 3" stroke={CHART.grid} />
+              <XAxis dataKey="label" {...axisProps} />
+              <YAxis {...axisProps} />
+              <Tooltip formatter={(v) => `$${fmt(v)}`} {...tooltipProps} />
               <Legend />
-              <ReferenceLine y={0} stroke="#999" />
-              <Bar dataKey="daily_in" name="In" fill="#0f6dd1" radius={[3, 3, 0, 0]} />
-              <Bar dataKey="daily_out" name="Out" fill="#d98c8c" radius={[3, 3, 0, 0]} />
-              <Line type="monotone" dataKey="net" name="Net Profit" stroke="#16803c" strokeWidth={2} dot={{ r: 3 }} />
+              <ReferenceLine y={0} stroke={CHART.zero} />
+              <Bar dataKey="daily_in" name="In" fill={CHART.in} radius={[3, 3, 0, 0]} />
+              <Bar dataKey="daily_out" name="Out" fill={CHART.out} radius={[3, 3, 0, 0]} />
+              <Line type="monotone" dataKey="net" name="Net Profit" stroke={CHART.meterProfit} strokeWidth={2} dot={{ r: 3 }} />
             </ComposedChart>
           </ResponsiveContainer>
         ) : <p className="muted">No readings for this machine yet.</p>}

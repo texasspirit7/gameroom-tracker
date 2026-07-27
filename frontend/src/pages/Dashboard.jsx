@@ -5,6 +5,7 @@ import {
   Tooltip, Legend, CartesianGrid, ReferenceLine, Cell,
 } from 'recharts';
 import { api, fmt, signedMoney } from '../api.js';
+import { CHART, axisProps, tooltipProps } from '../chartTheme.js';
 import { useDateRange } from '../DateRangeContext.jsx';
 import { useAuth } from '../AuthContext.jsx';
 
@@ -66,18 +67,13 @@ export default function Dashboard() {
         {latestDate && <> · latest upload {latestDate}</>}
       </div>
 
-      <div className="cards">
-        <Card label="Total In" value={`$${fmt(totals.total_in)}`} delta={delta('total_in')} />
-        <Card label="Total Out" value={`$${fmt(totals.total_out)}`} delta={delta('total_out')} invert />
-        <Card label="Match" value={`$${fmt(totals.match)}`} delta={delta('match')} invert />
-        <Card label="Expenses" value={`$${fmt(totals.expenses_total)}`} delta={delta('expenses_total')} invert />
-        <Card label="Meter Profit" value={signedMoney(totals.meter_profit)} tone={totals.meter_profit >= 0 ? 'good' : 'bad'} delta={delta('meter_profit')} />
-        <Card
-          label="Net Profit (after overhead)"
-          value={signedMoney(totals.net_profit)}
-          tone={totals.net_profit >= 0 ? 'good' : 'bad'}
-          delta={delta('net_profit')}
-        />
+      <div className="meterbank">
+        <Meter label="Total In" value={totals.total_in} delta={delta('total_in')} />
+        <Meter label="Total Out" value={totals.total_out} delta={delta('total_out')} invert />
+        <Meter label="Match" value={totals.match} delta={delta('match')} invert />
+        <Meter label="Expenses" value={totals.expenses_total} delta={delta('expenses_total')} invert />
+        <Meter label="Meter Profit" value={totals.meter_profit} signed toned delta={delta('meter_profit')} />
+        <Meter label="Net Profit" value={totals.net_profit} signed toned delta={delta('net_profit')} />
       </div>
 
       <div className="panel">
@@ -103,18 +99,18 @@ export default function Dashboard() {
         {hasData ? (
           <ResponsiveContainer width="100%" height={280}>
             <LineChart data={buckets} margin={{ top: 6, right: 16, left: 0, bottom: 0 }}>
-              <CartesianGrid strokeDasharray="3 3" stroke="#e4e8f0" />
-              <XAxis dataKey="label" fontSize={12} />
-              <YAxis fontSize={12} />
-              <Tooltip formatter={(v) => `$${fmt(v)}`} />
+              <CartesianGrid strokeDasharray="3 3" stroke={CHART.grid} />
+              <XAxis dataKey="label" {...axisProps} />
+              <YAxis {...axisProps} />
+              <Tooltip formatter={(v) => `$${fmt(v)}`} {...tooltipProps} />
               <Legend />
-              <ReferenceLine y={0} stroke="#999" />
-              <Line type="monotone" dataKey="total_in" name="Total In" stroke="#0f6dd1" strokeWidth={2} dot={{ r: 3 }} />
-              <Line type="monotone" dataKey="total_out" name="Total Out" stroke="#9db6d8" strokeWidth={2} dot={{ r: 3 }} />
-              <Line type="monotone" dataKey="match" name="Match" stroke="#8e5cd9" strokeWidth={2} dot={{ r: 3 }} />
-              <Line type="monotone" dataKey="expenses" name="Expenses" stroke="#b97c10" strokeWidth={2} dot={{ r: 3 }} />
-              <Line type="monotone" dataKey="meter_profit" name="Meter Profit" stroke="#16803c" strokeWidth={2} dot={{ r: 3 }} />
-              <Line type="monotone" dataKey="net_profit" name="Net Profit" stroke="#2ca8b3" strokeWidth={2} dot={{ r: 3 }} />
+              <ReferenceLine y={0} stroke={CHART.zero} />
+              <Line type="monotone" dataKey="total_in" name="Total In" stroke={CHART.totalIn} strokeWidth={2} dot={{ r: 3 }} />
+              <Line type="monotone" dataKey="total_out" name="Total Out" stroke={CHART.totalOut} strokeWidth={2} dot={{ r: 3 }} />
+              <Line type="monotone" dataKey="match" name="Match" stroke={CHART.match} strokeWidth={2} dot={{ r: 3 }} />
+              <Line type="monotone" dataKey="expenses" name="Expenses" stroke={CHART.expenses} strokeWidth={2} dot={{ r: 3 }} />
+              <Line type="monotone" dataKey="meter_profit" name="Meter Profit" stroke={CHART.meterProfit} strokeWidth={2} dot={{ r: 3 }} />
+              <Line type="monotone" dataKey="net_profit" name="Net Profit" stroke={CHART.netProfit} strokeWidth={2} dot={{ r: 3 }} />
             </LineChart>
           </ResponsiveContainer>
         ) : <p className="muted">No data in this range.</p>}
@@ -126,13 +122,13 @@ export default function Dashboard() {
           {hasData ? (
             <ResponsiveContainer width="100%" height={240}>
               <BarChart data={buckets}>
-                <CartesianGrid strokeDasharray="3 3" stroke="#e4e8f0" />
-                <XAxis dataKey="label" fontSize={12} />
-                <YAxis fontSize={12} />
-                <Tooltip formatter={(v) => `$${fmt(v)}`} />
+                <CartesianGrid strokeDasharray="3 3" stroke={CHART.grid} />
+                <XAxis dataKey="label" {...axisProps} />
+                <YAxis {...axisProps} />
+                <Tooltip formatter={(v) => `$${fmt(v)}`} {...tooltipProps} />
                 <Legend />
-                <Bar dataKey="total_in" name="In" fill="#0f6dd1" radius={[3, 3, 0, 0]} />
-                <Bar dataKey="total_out" name="Out" fill="#9db6d8" radius={[3, 3, 0, 0]} />
+                <Bar dataKey="total_in" name="In" fill={CHART.in} radius={[3, 3, 0, 0]} />
+                <Bar dataKey="total_out" name="Out" fill={CHART.out} radius={[3, 3, 0, 0]} />
               </BarChart>
             </ResponsiveContainer>
           ) : <p className="muted">No data yet.</p>}
@@ -143,11 +139,11 @@ export default function Dashboard() {
           {expenses.length ? (
             <ResponsiveContainer width="100%" height={240}>
               <BarChart data={expenses} layout="vertical" margin={{ left: 20 }}>
-                <XAxis type="number" fontSize={12} />
-                <YAxis type="category" dataKey="category" fontSize={12} width={80} />
-                <Tooltip formatter={(v) => `$${fmt(v)}`} />
-                <Bar dataKey="amount" fill="#b97c10" radius={[0, 3, 3, 0]}>
-                  {expenses.map((e, i) => <Cell key={i} fill={i % 2 ? '#d29a2e' : '#b97c10'} />)}
+                <XAxis type="number" {...axisProps} />
+                <YAxis type="category" dataKey="category" width={80} {...axisProps} />
+                <Tooltip formatter={(v) => `$${fmt(v)}`} {...tooltipProps} />
+                <Bar dataKey="amount" fill={CHART.expenses} radius={[0, 3, 3, 0]}>
+                  {expenses.map((e, i) => <Cell key={i} fill={i % 2 ? CHART.accent : CHART.expenses} />)}
                 </Bar>
               </BarChart>
             </ResponsiveContainer>
@@ -295,20 +291,64 @@ function relativeTime(sqliteUtc) {
   return `${days}d ago`;
 }
 
-function Card({ label, value, tone, delta, invert }) {
+/**
+ * Rolls a figure up from zero once on load, and between values when the date range changes.
+ * One orchestrated moment rather than scattered animation — and it sits out entirely when the
+ * viewer prefers reduced motion, landing on the final number immediately.
+ */
+function useCountUp(target, duration = 700) {
+  const [shown, setShown] = useState(0);
+  const fromRef = useRef(0);
+
+  useEffect(() => {
+    const to = Number(target) || 0;
+    if (window.matchMedia?.('(prefers-reduced-motion: reduce)').matches) {
+      fromRef.current = to;
+      setShown(to);
+      return undefined;
+    }
+    const from = fromRef.current;
+    if (from === to) return undefined;
+
+    let raf;
+    const start = performance.now();
+    const tick = (now) => {
+      const p = Math.min(1, (now - start) / duration);
+      const eased = 1 - (1 - p) ** 3;
+      setShown(from + (to - from) * eased);
+      if (p < 1) {
+        raf = requestAnimationFrame(tick);
+      } else {
+        fromRef.current = to;
+      }
+    };
+    raf = requestAnimationFrame(tick);
+    return () => cancelAnimationFrame(raf);
+  }, [target, duration]);
+
+  return shown;
+}
+
+/** One readout in the meter bank. `signed` shows +/-, `toned` colours it by profit/loss. */
+function Meter({ label, value, signed, toned, delta, invert }) {
+  const shown = useCountUp(value);
+  const tone = toned ? (value >= 0 ? 'good' : 'bad') : '';
+  const text = signed ? signedMoney(shown) : `$${fmt(shown)}`;
+
   let deltaEl = null;
   if (delta != null) {
     const good = invert ? delta < 0 : delta >= 0;
     deltaEl = (
-      <div className={`card-delta ${good ? 'pos' : 'neg'}`}>
-        {delta >= 0 ? '▲' : '▼'} {signedMoney(Math.abs(delta))} vs previous period
+      <div className={`d ${good ? 'pos' : 'neg'}`}>
+        {delta >= 0 ? '▲' : '▼'} {signedMoney(Math.abs(delta))} vs prev
       </div>
     );
   }
+
   return (
-    <div className={`card ${tone || ''}`}>
-      <div className="label">{label}</div>
-      <div className={`value ${tone || ''}`}>{value}</div>
+    <div className="meter" style={tone ? { '--tone': `var(--${tone})` } : undefined}>
+      <div className="k">{label}</div>
+      <div className={`v ${tone}`}>{text}</div>
       {deltaEl}
     </div>
   );

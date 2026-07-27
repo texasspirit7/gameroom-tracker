@@ -36,6 +36,18 @@ function groupByMonth(sheets) {
 
 const currentMonthKey = () => new Date().toISOString().slice(0, 7);
 
+/**
+ * Weaves a month's missing days into its sheet list so a gap shows up in the date sequence
+ * where it belongs, rather than only as a count in a column you have to go looking for.
+ * Newest first, matching the sheet ordering from the API.
+ */
+function mergeGaps(sheets, missingDates) {
+  return [
+    ...sheets.map((s) => ({ kind: 'sheet', date: s.sheet_date, s })),
+    ...(missingDates ?? []).map((date) => ({ kind: 'gap', date })),
+  ].sort((a, b) => (a.date < b.date ? 1 : a.date > b.date ? -1 : 0));
+}
+
 export default function Sheets() {
   const { isAdmin, authEnabled } = useAuth();
   const canModify = !authEnabled || isAdmin;
@@ -107,18 +119,7 @@ export default function Sheets() {
                   </tr>
                   {expandedMonth === g.key && (
                     <tr>
-                      <td colSpan={10} style={{ background: '#f7f9fd' }}>
-                        {missingByMonth.get(g.key)?.length > 0 && (
-                          <div className="warning-box" style={{ margin: '8px 0 0' }}>
-                            <strong>
-                              ⚠ {missingByMonth.get(g.key).length} day
-                              {missingByMonth.get(g.key).length === 1 ? '' : 's'} with no sheet
-                            </strong>
-                            <div style={{ marginTop: 6 }}>
-                              {missingByMonth.get(g.key).map((d) => `${d} (${weekday(d)})`).join(' · ')}
-                            </div>
-                          </div>
-                        )}
+                      <td colSpan={10} style={{ background: 'var(--sunk)' }}>
                         <table style={{ margin: '8px 0' }}>
                           <thead>
                             <tr>
@@ -129,7 +130,16 @@ export default function Sheets() {
                             </tr>
                           </thead>
                           <tbody>
-                            {g.sheets.map((s) => (
+                            {mergeGaps(g.sheets, missingByMonth.get(g.key)).map((r) => (r.kind === 'gap' ? (
+                              <tr key={`gap-${r.date}`} className="gap-row">
+                                <td>{r.date}</td>
+                                <td>{weekday(r.date)}</td>
+                                <td colSpan={9}>No sheet on record</td>
+                                <td><span className="badge high">Gap</span></td>
+                                {canModify && <td />}
+                              </tr>
+                            ) : (
+                              ((s) => (
                               <tr key={s.id} className="clickable" onClick={() => navigate(`/sheets/${s.id}`)}>
                                 <td>{s.sheet_date}</td>
                                 <td>{weekday(s.sheet_date)}</td>
@@ -160,7 +170,8 @@ export default function Sheets() {
                                   </td>
                                 )}
                               </tr>
-                            ))}
+                              ))(r.s)
+                            )))}
                           </tbody>
                         </table>
                       </td>
