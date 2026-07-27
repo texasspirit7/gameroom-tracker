@@ -38,6 +38,11 @@ export default function Dashboard() {
   // pixel height because rows are variable — an entry with a `detail` line is taller than one
   // without. offsetTop is used (not getBoundingClientRect) so re-measuring stays correct even
   // when the list is already scrolled.
+  //
+  // `data` is a dependency as well as `audit`: the activity list only exists in the DOM once
+  // the dashboard body renders, and /api/audit (a small LIMIT query) normally resolves before
+  // /api/dashboard (many aggregations). Keyed on `audit` alone, the effect fired while the ref
+  // was still null and never ran again once the list mounted, so the list rendered uncapped.
   useLayoutEffect(() => {
     const el = activityRef.current;
     if (!el) return undefined;
@@ -50,7 +55,7 @@ export default function Dashboard() {
     measure();
     window.addEventListener('resize', measure);
     return () => window.removeEventListener('resize', measure);
-  }, [audit]);
+  }, [audit, data]);
 
   if (error) return <div className="error-box">{error}</div>;
   if (!data) return <p className="muted"><span className="spinner" />Loading dashboard…</p>;
