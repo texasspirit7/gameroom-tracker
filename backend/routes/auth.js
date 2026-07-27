@@ -50,10 +50,11 @@ authRouter.post('/logout', (req, res) => {
   res.json({ ok: true });
 });
 
-// Any approved user can VIEW the users list — only admins can approve/block/change roles.
+// The roster carries every account's email, role and approval history, so the whole router —
+// reads included — is admin-only.
 adminRouter.use(requireAuth, requireApproved);
 
-adminRouter.get('/users', (req, res) => {
+adminRouter.get('/users', requireAdmin, (req, res) => {
   res.json(db.prepare('SELECT id, email, name, role, status, created_at, approved_at, approved_by FROM users ORDER BY created_at DESC').all());
 });
 

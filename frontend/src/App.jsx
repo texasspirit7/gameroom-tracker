@@ -24,7 +24,7 @@ const NAV = [
   { to: '/sheets', label: 'Daily Sheets', icon: '🗂️' },
   { to: '/machines', label: 'Machines', icon: '🎰' },
   { to: '/expenses', label: 'Expenses', icon: '🧾' },
-  { to: '/admin', label: 'Admin — Users', icon: '🛡️' },
+  { to: '/admin', label: 'Admin — Users', icon: '🛡️', adminOnly: true },
   { to: '/profit-split', label: 'Profit Split', icon: '🤝', adminOnly: true },
   { to: '/analytics', label: 'Analytics', icon: '🔍', adminOnly: true },
 ];
@@ -89,6 +89,29 @@ function SidebarFooter() {
   );
 }
 
+/**
+ * Route guard for admin-only pages.
+ *
+ * Hiding the nav link isn't enough — anyone can type the URL, and the page would otherwise
+ * mount, fire its requests and render a frame full of "Admin access required" errors plus
+ * stuck spinners. The server is the real boundary (these endpoints already 403); this just
+ * makes the refusal a clean, honest screen instead of a broken-looking one.
+ */
+function AdminOnly({ children }) {
+  const { isAdmin, authEnabled } = useAuth();
+  if (!authEnabled || isAdmin) return children;
+  return (
+    <div className="panel" style={{ textAlign: 'center', padding: '48px 24px' }}>
+      <div style={{ fontSize: 34, marginBottom: 12 }}>🛡️</div>
+      <h2 style={{ justifyContent: 'center' }}>Admin access required</h2>
+      <p className="muted" style={{ maxWidth: '46ch', margin: '0 auto 20px' }}>
+        This page is limited to admin accounts. Ask an admin if you need access to it.
+      </p>
+      <NavLink className="btn secondary" to="/">Back to dashboard</NavLink>
+    </div>
+  );
+}
+
 function AppShell() {
   const [navOpen, setNavOpen] = useState(false);
   const { pathname } = useLocation();
@@ -142,9 +165,9 @@ function AppShell() {
           <Route path="/machines" element={<Machines />} />
           <Route path="/machines/:number" element={<MachineDetail />} />
           <Route path="/expenses" element={<Expenses />} />
-          <Route path="/admin" element={<AdminUsers />} />
-          <Route path="/profit-split" element={<ProfitSplit />} />
-          <Route path="/analytics" element={<Analytics />} />
+          <Route path="/admin" element={<AdminOnly><AdminUsers /></AdminOnly>} />
+          <Route path="/profit-split" element={<AdminOnly><ProfitSplit /></AdminOnly>} />
+          <Route path="/analytics" element={<AdminOnly><Analytics /></AdminOnly>} />
         </Routes>
       </main>
     </div>
