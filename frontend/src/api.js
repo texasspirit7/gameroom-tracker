@@ -70,6 +70,9 @@ export const api = {
   analyticsByDayOfMonthMachines: (day) => request(`/api/analytics/day-of-month/${day}/machines`),
   analyticsByPayPeriod: () => request('/api/analytics/pay-period'),
   analyticsByPayPeriodMachines: (period) => request(`/api/analytics/pay-period/${period}/machines`),
+  analyticsWeekendSplit: () => request('/api/analytics/weekend-split'),
+  analyticsWeekendSplitMachines: (key) => request(`/api/analytics/weekend-split/${key}/machines`),
+  analyticsOverview: () => request('/api/analytics/overview'),
   analyticsLeaderboard: () => request('/api/analytics/leaderboard'),
   analyticsTrend: () => request('/api/analytics/trend'),
 };

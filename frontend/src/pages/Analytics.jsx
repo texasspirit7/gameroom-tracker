@@ -5,7 +5,26 @@ import {
 } from 'recharts';
 import { api, fmt, signedMoney } from '../api.js';
 
-function PeriodSection({ title, columnLabel, description, fetchSummary, fetchMachines }) {
+// The six metrics selectable from the dropdown at the top of the page — every section below
+// reflects whichever one is selected. "Machine Profit" (total_in − total_out) is the machines'
+// raw performance before the loan_rtn/match settlement; "Meter Profit" already nets that out.
+// Total In/Out/Match are plain money-flow numbers (never colored good/bad); the three profit
+// figures are colored green/red by sign, same convention as the Dashboard cards.
+const METRICS = [
+  { key: 'total_in', label: 'Total In', field: 'avg_total_in', neutral: true },
+  { key: 'total_out', label: 'Total Out', field: 'avg_total_out', neutral: true },
+  { key: 'match', label: 'Match', field: 'avg_match', neutral: true },
+  { key: 'machine_profit', label: 'Machine Profit', field: 'avg_machine_profit' },
+  { key: 'meter_profit', label: 'Meter Profit', field: 'avg_meter_profit' },
+  { key: 'net_profit', label: 'Net Profit', field: 'avg_net_profit' },
+];
+
+function MetricValue({ value, metric }) {
+  const formatted = metric.neutral ? `$${fmt(value)}` : signedMoney(value);
+  return <span className={metric.neutral ? '' : value >= 0 ? 'pos' : 'neg'}>{formatted}</span>;
+}
+
+function PeriodSection({ title, columnLabel, description, fetchSummary, fetchMachines, metric }) {
   const [rows, setRows] = useState(null);
   const [error, setError] = useState(null);
   const [selectedKey, setSelectedKey] = useState(null);
@@ -54,8 +73,10 @@ function PeriodSection({ title, columnLabel, description, fetchSummary, fetchMac
               <YAxis fontSize={12} />
               <Tooltip formatter={(v) => `$${fmt(v)}`} />
               <ReferenceLine y={0} stroke="#999" />
-              <Bar dataKey="avg_net_profit" name="Avg Net Profit" radius={[3, 3, 0, 0]} onClick={select} cursor="pointer">
-                {rows.map((r) => <Cell key={r.key} fill={r.avg_net_profit >= 0 ? '#16803c' : '#c22f2f'} />)}
+              <Bar dataKey={metric.field} name={`Avg ${metric.label}`} radius={[3, 3, 0, 0]} onClick={select} cursor="pointer">
+                {rows.map((r) => (
+                  <Cell key={r.key} fill={metric.neutral ? '#0f6dd1' : r[metric.field] >= 0 ? '#16803c' : '#c22f2f'} />
+                ))}
               </Bar>
             </BarChart>
           </ResponsiveContainer>
@@ -63,8 +84,7 @@ function PeriodSection({ title, columnLabel, description, fetchSummary, fetchMac
           <table style={{ marginTop: 12 }}>
             <thead>
               <tr>
-                <th>{columnLabel}</th><th>Sheets</th><th>Avg In</th><th>Avg Out</th>
-                <th>Avg Meter Profit</th><th>Avg Net Profit</th>
+                <th>{columnLabel}</th><th>Sheets</th><th>Avg {metric.label}</th>
               </tr>
             </thead>
             <tbody>
@@ -73,14 +93,11 @@ function PeriodSection({ title, columnLabel, description, fetchSummary, fetchMac
                   <tr className="clickable" onClick={() => select(r)}>
                     <td><strong>{r.label}</strong></td>
                     <td>{r.sheet_count}</td>
-                    <td>${fmt(r.avg_total_in)}</td>
-                    <td>${fmt(r.avg_total_out)}</td>
-                    <td className={r.avg_meter_profit >= 0 ? 'pos' : 'neg'}>{signedMoney(r.avg_meter_profit)}</td>
-                    <td className={r.avg_net_profit >= 0 ? 'pos' : 'neg'}>{signedMoney(r.avg_net_profit)}</td>
+                    <td><MetricValue value={r[metric.field]} metric={metric} /></td>
                   </tr>
                   {selectedKey === r.key && (
                     <tr>
-                      <td colSpan={6} style={{ background: '#f7f9fd' }}>
+                      <td colSpan={3} style={{ background: '#f7f9fd' }}>
                         {machinesLoading ? (
                           <p className="muted" style={{ margin: '10px 0' }}><span className="spinner" />Loading machine averages…</p>
                         ) : machines.length === 0 ? (
@@ -212,25 +229,82 @@ function LeaderboardSection() {
   );
 }
 
+function OverviewSection({ metric }) {
+  const [data, setData] = useState(null);
+  const [error, setError] = useState(null);
+
+  useEffect(() => { api.analyticsOverview().then(setData).catch((e) => setError(e.message)); }, []);
+
+  if (error) return <div className="panel"><h2>Overview</h2><div className="error-box">{error}</div></div>;
+  if (!data) return <div className="panel"><h2>Overview</h2><p className="muted"><span className="spinner" />Loading…</p></div>;
+
+  return (
+    <div className="panel">
+      <h2>Overview — {metric.label}</h2>
+      <p className="muted" style={{ fontSize: 12, marginTop: -8, marginBottom: 14 }}>
+        Quick top-line averages for the selected metric, across all tracked history.
+      </p>
+      <div className="cards">
+        <div className="card">
+          <div className="label">Avg per Day</div>
+          <div className="value"><MetricValue value={data.per_day[metric.field]} metric={metric} /></div>
+        </div>
+        <div className="card">
+          <div className="label">Avg per Week</div>
+          <div className="value"><MetricValue value={data.per_week[metric.field]} metric={metric} /></div>
+        </div>
+        <div className="card">
+          <div className="label">Avg per Month</div>
+          <div className="value"><MetricValue value={data.per_month[metric.field]} metric={metric} /></div>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 export default function Analytics() {
+  const [metricKey, setMetricKey] = useState('net_profit');
+  const metric = METRICS.find((m) => m.key === metricKey);
+
   return (
     <>
-      <h1 className="page-title">Analytics</h1>
-      <div className="page-sub">
-        Trend, seasonality, and machine-level breakdowns — click any bar or row to drill into the
-        per-machine numbers for that period. Use this to spot which days/periods tend to run hot or cold,
-        and which machines are actually worth keeping.
+      <div className="toolbar">
+        <div>
+          <h1 className="page-title" style={{ margin: 0 }}>Analytics</h1>
+          <div className="page-sub" style={{ marginTop: 4 }}>
+            Trend, seasonality, and machine-level breakdowns — click any bar or row to drill into the
+            per-machine numbers for that period. Use this to spot which days/periods tend to run hot or cold,
+            and which machines are actually worth keeping.
+          </div>
+        </div>
+        <div className="spacer" />
+        <label style={{ display: 'flex', flexDirection: 'column', gap: 4, fontSize: 12, color: 'var(--muted)', fontWeight: 600 }}>
+          Metric
+          <select value={metricKey} onChange={(e) => setMetricKey(e.target.value)} style={{ minWidth: 160 }}>
+            {METRICS.map((m) => <option key={m.key} value={m.key}>{m.label}</option>)}
+          </select>
+        </label>
       </div>
 
+      <OverviewSection metric={metric} />
       <TrendSection />
       <LeaderboardSection />
 
+      <PeriodSection
+        title="Weekday vs Weekend"
+        columnLabel="Period"
+        description="Weekday = Mon–Thu. Weekend = Fri, Sat, Sun — this room's actual busy nights, not the calendar definition."
+        fetchSummary={api.analyticsWeekendSplit}
+        fetchMachines={api.analyticsWeekendSplitMachines}
+        metric={metric}
+      />
       <PeriodSection
         title="By Day of Week"
         columnLabel="Day"
         description="Averaged across all history — is one day of the week consistently better or worse?"
         fetchSummary={api.analyticsByWeekday}
         fetchMachines={api.analyticsByWeekdayMachines}
+        metric={metric}
       />
       <PeriodSection
         title="By Day of Month"
@@ -238,6 +312,7 @@ export default function Analytics() {
         description="Looking for a payday effect — spikes around common pay dates (1st, 15th, end of month)."
         fetchSummary={api.analyticsByDayOfMonth}
         fetchMachines={api.analyticsByDayOfMonthMachines}
+        metric={metric}
       />
       <PeriodSection
         title="By Pay Period"
@@ -245,6 +320,7 @@ export default function Analytics() {
         description="Same idea, rolled up into thirds of the month — less sparse than exact day-of-month with limited history."
         fetchSummary={api.analyticsByPayPeriod}
         fetchMachines={api.analyticsByPayPeriodMachines}
+        metric={metric}
       />
       <PeriodSection
         title="By Week"
@@ -252,6 +328,7 @@ export default function Analytics() {
         description="Each calendar week (Mon–Sun), most recent first."
         fetchSummary={api.analyticsByWeek}
         fetchMachines={api.analyticsByWeekMachines}
+        metric={metric}
       />
       <PeriodSection
         title="By Month"
@@ -259,6 +336,7 @@ export default function Analytics() {
         description="Each calendar month, most recent first."
         fetchSummary={api.analyticsByMonth}
         fetchMachines={api.analyticsByMonthMachines}
+        metric={metric}
       />
     </>
   );

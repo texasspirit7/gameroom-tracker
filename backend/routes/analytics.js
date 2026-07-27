@@ -21,13 +21,19 @@ const weekStartISO = (iso) => {
 };
 const shortDate = (iso) => `${MONTHS[Number(iso.slice(5, 7)) - 1]} ${Number(iso.slice(8, 10))}`;
 
-/** Every sheet with its net profit (meter profit minus that sheet's own logged expenses). */
+/** Every sheet with its net profit (meter profit minus that sheet's own logged expenses)
+ * and machine profit (raw total_in − total_out, before the loan_rtn/match settlement that
+ * meter_profit already nets out — "how much did the machines themselves make"). */
 function sheetsWithNetProfit() {
   return db.prepare(`
-    SELECT s.id, s.sheet_date, s.total_in, s.total_out, s.meter_profit,
+    SELECT s.id, s.sheet_date, s.total_in, s.total_out, s.match_amount, s.meter_profit,
            COALESCE((SELECT SUM(e.amount) FROM expenses e WHERE e.sheet_id = s.id), 0) AS sheet_expenses
     FROM sheets s
-  `).all().map((s) => ({ ...s, net_profit: s.meter_profit - s.sheet_expenses }));
+  `).all().map((s) => ({
+    ...s,
+    net_profit: s.meter_profit - s.sheet_expenses,
+    machine_profit: s.total_in - s.total_out,
+  }));
 }
 
 function summarize(key, label, sheets) {
@@ -39,10 +45,36 @@ function summarize(key, label, sheets) {
     sheet_count: n,
     avg_total_in: n ? sum('total_in') / n : 0,
     avg_total_out: n ? sum('total_out') / n : 0,
+    avg_match: n ? sum('match_amount') / n : 0,
+    avg_machine_profit: n ? sum('machine_profit') / n : 0,
     avg_meter_profit: n ? sum('meter_profit') / n : 0,
     avg_net_profit: n ? sum('net_profit') / n : 0,
   };
 }
+
+/** Same shape as summarize(), but averaged per distinct period (week/month/etc, via keyFn)
+ * rather than per sheet — "on average, how much per week" rather than "per sheet". */
+function periodAverage(sheets, keyFn) {
+  const periods = new Set(sheets.map((s) => keyFn(s.sheet_date)));
+  const n = periods.size;
+  const sum = (f) => sheets.reduce((acc, s) => acc + (s[f] || 0), 0);
+  return {
+    period_count: n,
+    avg_total_in: n ? sum('total_in') / n : 0,
+    avg_total_out: n ? sum('total_out') / n : 0,
+    avg_match: n ? sum('match_amount') / n : 0,
+    avg_machine_profit: n ? sum('machine_profit') / n : 0,
+    avg_meter_profit: n ? sum('meter_profit') / n : 0,
+    avg_net_profit: n ? sum('net_profit') / n : 0,
+  };
+}
+
+// Fri/Sat/Sun — this room runs busier on the same nights most places call "the weekend
+// starts Friday," not the calendar Sat/Sun definition.
+const isWeekendDate = (sheetDate) => {
+  const wd = new Date(`${sheetDate}T00:00:00Z`).getUTCDay(); // 0=Sun .. 6=Sat
+  return wd === 5 || wd === 6 || wd === 0;
+};
 
 function machineAverages(sheetIds) {
   if (!sheetIds.length) return [];
@@ -124,6 +156,37 @@ analyticsRouter.get('/month/:month/machines', adminGate, (req, res) => {
   const { month } = req.params;
   const sheetIds = db.prepare("SELECT id FROM sheets WHERE strftime('%Y-%m', sheet_date) = ?").all(month).map((s) => s.id);
   res.json(machineAverages(sheetIds));
+});
+
+// GET /api/analytics/weekend-split — Weekday (Mon–Thu) vs Weekend (Fri–Sun), across all history
+analyticsRouter.get('/weekend-split', adminGate, (req, res) => {
+  const sheets = sheetsWithNetProfit();
+  const weekend = sheets.filter((s) => isWeekendDate(s.sheet_date));
+  const weekday = sheets.filter((s) => !isWeekendDate(s.sheet_date));
+  res.json([
+    summarize('weekday', 'Weekday (Mon–Thu)', weekday),
+    summarize('weekend', 'Weekend (Fri–Sun)', weekend),
+  ]);
+});
+
+// GET /api/analytics/weekend-split/:key/machines  (key = 'weekday' | 'weekend')
+analyticsRouter.get('/weekend-split/:key/machines', adminGate, (req, res) => {
+  const { key } = req.params;
+  if (key !== 'weekday' && key !== 'weekend') return res.status(400).json({ error: 'Unknown period' });
+  const sheetIds = db.prepare('SELECT id, sheet_date FROM sheets').all()
+    .filter((s) => (key === 'weekend') === isWeekendDate(s.sheet_date))
+    .map((s) => s.id);
+  res.json(machineAverages(sheetIds));
+});
+
+// GET /api/analytics/overview — quick top-line averages per day / per week / per month, across all history
+analyticsRouter.get('/overview', adminGate, (req, res) => {
+  const sheets = sheetsWithNetProfit();
+  res.json({
+    per_day: summarize('day', 'Per Day', sheets),
+    per_week: periodAverage(sheets, weekStartISO),
+    per_month: periodAverage(sheets, (d) => d.slice(0, 7)),
+  });
 });
 
 // GET /api/analytics/day-of-month — average performance for each day-of-month (1-31), across all history.
