@@ -21,19 +21,13 @@ const weekStartISO = (iso) => {
 };
 const shortDate = (iso) => `${MONTHS[Number(iso.slice(5, 7)) - 1]} ${Number(iso.slice(8, 10))}`;
 
-/** Every sheet with its net profit (meter profit minus that sheet's own logged expenses)
- * and machine profit (raw total_in − total_out, before the loan_rtn/match settlement that
- * meter_profit already nets out — "how much did the machines themselves make"). */
+/** Every sheet with its net profit (meter profit minus that sheet's own logged expenses). */
 function sheetsWithNetProfit() {
   return db.prepare(`
     SELECT s.id, s.sheet_date, s.total_in, s.total_out, s.match_amount, s.meter_profit,
            COALESCE((SELECT SUM(e.amount) FROM expenses e WHERE e.sheet_id = s.id), 0) AS sheet_expenses
     FROM sheets s
-  `).all().map((s) => ({
-    ...s,
-    net_profit: s.meter_profit - s.sheet_expenses,
-    machine_profit: s.total_in - s.total_out,
-  }));
+  `).all().map((s) => ({ ...s, net_profit: s.meter_profit - s.sheet_expenses }));
 }
 
 function summarize(key, label, sheets) {
@@ -46,7 +40,7 @@ function summarize(key, label, sheets) {
     avg_total_in: n ? sum('total_in') / n : 0,
     avg_total_out: n ? sum('total_out') / n : 0,
     avg_match: n ? sum('match_amount') / n : 0,
-    avg_machine_profit: n ? sum('machine_profit') / n : 0,
+    avg_expenses: n ? sum('sheet_expenses') / n : 0,
     avg_meter_profit: n ? sum('meter_profit') / n : 0,
     avg_net_profit: n ? sum('net_profit') / n : 0,
   };
@@ -63,7 +57,7 @@ function periodAverage(sheets, keyFn) {
     avg_total_in: n ? sum('total_in') / n : 0,
     avg_total_out: n ? sum('total_out') / n : 0,
     avg_match: n ? sum('match_amount') / n : 0,
-    avg_machine_profit: n ? sum('machine_profit') / n : 0,
+    avg_expenses: n ? sum('sheet_expenses') / n : 0,
     avg_meter_profit: n ? sum('meter_profit') / n : 0,
     avg_net_profit: n ? sum('net_profit') / n : 0,
   };

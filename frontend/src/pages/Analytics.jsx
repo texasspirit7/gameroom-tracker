@@ -6,15 +6,16 @@ import {
 import { api, fmt, signedMoney } from '../api.js';
 
 // The six metrics selectable from the dropdown at the top of the page — every section below
-// reflects whichever one is selected. "Machine Profit" (total_in − total_out) is the machines'
-// raw performance before the loan_rtn/match settlement; "Meter Profit" already nets that out.
-// Total In/Out/Match are plain money-flow numbers (never colored good/bad); the three profit
-// figures are colored green/red by sign, same convention as the Dashboard cards.
+// reflects whichever one is selected. Same set as the Dashboard's "Profit trend by day" chart.
+// Total In/Out/Match/Expenses are plain money-flow numbers (never colored good/bad); the two
+// profit figures are colored green/red by sign, same convention as the Dashboard cards.
+// Note: Expenses here is sheet-linked expenses only (pay, cleaning, etc.) — unlike the
+// Dashboard's Expenses card, it doesn't include manually-logged overhead from the Expenses page.
 const METRICS = [
   { key: 'total_in', label: 'Total In', field: 'avg_total_in', neutral: true },
   { key: 'total_out', label: 'Total Out', field: 'avg_total_out', neutral: true },
   { key: 'match', label: 'Match', field: 'avg_match', neutral: true },
-  { key: 'machine_profit', label: 'Machine Profit', field: 'avg_machine_profit' },
+  { key: 'expenses', label: 'Expenses', field: 'avg_expenses', neutral: true },
   { key: 'meter_profit', label: 'Meter Profit', field: 'avg_meter_profit' },
   { key: 'net_profit', label: 'Net Profit', field: 'avg_net_profit' },
 ];
