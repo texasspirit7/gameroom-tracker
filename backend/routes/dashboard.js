@@ -7,6 +7,23 @@ export const machinesRouter = Router();
 const DATE_RE = /^\d{4}-\d{2}-\d{2}$/;
 const holdPct = (dIn, dOut) => (dIn > 0 ? Math.round(((dIn - dOut) / dIn) * 100) : null);
 
+/**
+ * Derives net, hold % and the state flag a machine wears on its cabinet card.
+ * Shared by the machines list and the dashboard's top-performers strip so the two can't
+ * disagree about what counts as "bleeding".
+ */
+function withMachineState(r) {
+  const net = (r.total_in || 0) - (r.total_out || 0);
+  const hold = holdPct(r.total_in, r.total_out);
+  let flag = null;
+  if (r.total_in === 0 && r.total_out === 0) flag = 'dead';
+  else if (r.total_in === 0 && r.total_out > 0) flag = 'bleeding';
+  else if (hold != null && hold < -50) flag = 'bleeding';
+  else if (hold != null && hold < 0) flag = 'negative';
+  else if (net > 0) flag = 'profit';
+  return { ...r, net, hold_pct: hold, flag };
+}
+
 const addDays = (iso, delta) => {
   const d = new Date(`${iso}T00:00:00Z`);
   d.setUTCDate(d.getUTCDate() + delta);
@@ -155,6 +172,10 @@ function alertsForRange(from, to, label) {
 
 // Flags a gap in daily uploads — independent of whatever range is being viewed, since
 // it's about real-world business continuity, not the historical window on screen.
+/** How many sheets/machines the dashboard's summary strips carry. */
+const RECENT_SHEET_COUNT = 3;
+const TOP_MACHINE_COUNT = 5;
+
 const MISSING_DAY_THRESHOLD = 2;
 export function missingDayAlert(latestDate) {
   if (!latestDate) return null;
@@ -252,6 +273,33 @@ dashboardRouter.get('/', (req, res) => {
     ORDER BY machine_number
   `).all(range.from, range.to).map((r) => r.machine_number);
 
+  // The newest few sheets, for the dashboard's recent-sheets tiles. Built from the rows
+  // aggregate() already fetched (ordered oldest-first) rather than re-querying.
+  const recentSheets = sheets.slice(-RECENT_SHEET_COUNT).reverse().map((s) => {
+    const sheetExpenses = sheetExpenseTotals.get(s.id) || 0;
+    return {
+      id: s.id,
+      sheet_date: s.sheet_date,
+      total_in: s.total_in,
+      total_out: s.total_out,
+      match_amount: s.match_amount,
+      expenses: sheetExpenses,
+      meter_profit: s.meter_profit,
+      net_profit: (s.meter_profit || 0) - sheetExpenses,
+    };
+  });
+
+  // Best earners in range, shown as cabinet cards alongside the machines-with-no-play list.
+  const topMachines = db.prepare(`
+    SELECT mr.machine_number, SUM(mr.daily_in) AS total_in, SUM(mr.daily_out) AS total_out
+    FROM machine_readings mr JOIN sheets s ON s.id = mr.sheet_id
+    WHERE s.sheet_date BETWEEN ? AND ?
+    GROUP BY mr.machine_number
+    HAVING SUM(mr.daily_in) - SUM(mr.daily_out) > 0
+    ORDER BY (SUM(mr.daily_in) - SUM(mr.daily_out)) DESC
+    LIMIT ?
+  `).all(range.from, range.to, TOP_MACHINE_COUNT).map(withMachineState);
+
   const latestDate = db.prepare('SELECT MAX(sheet_date) AS d FROM sheets').get().d;
 
   const alerts = alertsForRange(range.from, range.to, range.label);
@@ -268,6 +316,8 @@ dashboardRouter.get('/', (req, res) => {
     expenses,
     otherExpensesTotal: totals.other_expenses,
     deadMachines,
+    recentSheets,
+    topMachines,
     latestDate,
   });
 });
@@ -290,19 +340,10 @@ machinesRouter.get('/', (req, res) => {
     GROUP BY mr.machine_number ORDER BY mr.machine_number
   `).all(range.from, range.to);
 
-  const machines = rows.map((r) => {
-    const net = (r.total_in || 0) - (r.total_out || 0);
-    const hold = holdPct(r.total_in, r.total_out);
-    let flag = null;
-    if (r.total_in === 0 && r.total_out === 0) flag = 'dead';
-    else if (r.total_in === 0 && r.total_out > 0) flag = 'bleeding';
-    else if (hold != null && hold < -50) flag = 'bleeding';
-    else if (hold != null && hold < 0) flag = 'negative';
-    else if (net > 0) flag = 'profit';
-    return { ...r, net, hold_pct: hold, flag };
+  res.json({
+    range: { from: range.from, to: range.to, label: range.label, allTime: range.allTime },
+    machines: rows.map(withMachineState),
   });
-
-  res.json({ range: { from: range.from, to: range.to, label: range.label, allTime: range.allTime }, machines });
 });
 
 // GET /api/machines/meta — machine-number bounds actually present in the data

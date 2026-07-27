@@ -1,5 +1,5 @@
 import { useEffect, useLayoutEffect, useRef, useState } from 'react';
-import { Link } from 'react-router-dom';
+import { Link, useNavigate } from 'react-router-dom';
 import {
   ResponsiveContainer, LineChart, Line, BarChart, Bar, XAxis, YAxis,
   Tooltip, Legend, CartesianGrid, ReferenceLine, Cell,
@@ -8,11 +8,15 @@ import { api, fmt, signedMoney } from '../api.js';
 import { CHART, axisProps, tooltipProps } from '../chartTheme.js';
 import { useDateRange } from '../DateRangeContext.jsx';
 import { useAuth } from '../AuthContext.jsx';
+import CabinetCard from '../components/CabinetCard.jsx';
+
+const weekday = (iso) => new Date(`${iso}T00:00:00Z`).toLocaleDateString('en-US', { weekday: 'short', timeZone: 'UTC' });
 
 export default function Dashboard() {
   const { from, to, label, preset } = useDateRange();
   const { isAdmin, authEnabled } = useAuth();
   const canModify = !authEnabled || isAdmin;
+  const navigate = useNavigate();
   const [data, setData] = useState(null);
   const [error, setError] = useState(null);
   const [audit, setAudit] = useState(null);
@@ -51,7 +55,10 @@ export default function Dashboard() {
   if (error) return <div className="error-box">{error}</div>;
   if (!data) return <p className="muted"><span className="spinner" />Loading dashboard…</p>;
 
-  const { totals, previous, buckets, alerts, expenses, otherExpensesTotal, deadMachines, range, chartGranularity, latestDate } = data;
+  const {
+    totals, previous, buckets, alerts, expenses, otherExpensesTotal, deadMachines,
+    recentSheets = [], topMachines = [], range, chartGranularity, latestDate,
+  } = data;
   const hasData = totals.sheet_count > 0;
   const chartNoun = chartGranularity === 'month' ? 'month' : chartGranularity === 'week' ? 'week' : 'day';
 
@@ -75,6 +82,44 @@ export default function Dashboard() {
         <Meter label="Meter Profit" value={totals.meter_profit} signed toned delta={delta('meter_profit')} />
         <Meter label="Net Profit" value={totals.net_profit} signed toned delta={delta('net_profit')} />
       </div>
+
+      {recentSheets.length > 0 && (
+        <div className="panel">
+          <h2>
+            Recent sheets
+            <span className="panel-count">{recentSheets.length} most recent · click to open</span>
+          </h2>
+          <div className="cabs fixed-3">
+            {recentSheets.map((s) => (
+              <div
+                key={s.id}
+                className="cab"
+                role="button"
+                tabIndex={0}
+                onClick={() => navigate(`/sheets/${s.id}`)}
+                onKeyDown={(e) => {
+                  if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); navigate(`/sheets/${s.id}`); }
+                }}
+              >
+                <div className="cab-plate">
+                  <span className="cab-no">{s.sheet_date}</span>
+                  <span className="cab-state dead">{weekday(s.sheet_date)}</span>
+                </div>
+                <div className="cab-body">
+                  <div className="cab-fig"><span>Total In</span><span>${fmt(s.total_in)}</span></div>
+                  <div className="cab-fig"><span>Total Out</span><span>${fmt(s.total_out)}</span></div>
+                  <div className="cab-fig"><span>Match</span><span>${fmt(s.match_amount)}</span></div>
+                  <div className="cab-fig"><span>Expenses</span><span>${fmt(s.expenses)}</span></div>
+                  <div className="cab-fig cab-fig-total">
+                    <span>Net Profit</span>
+                    <span className={s.net_profit >= 0 ? 'pos' : 'neg'}>{signedMoney(s.net_profit)}</span>
+                  </div>
+                </div>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
 
       <div className="panel">
         <h2>Alerts — {range.label}</h2>
@@ -155,6 +200,22 @@ export default function Dashboard() {
           </p>
         </div>
       </div>
+
+      {topMachines.length > 0 && (
+        <div className="panel">
+          <h2>
+            Top performers — {range.label}
+            <span className="panel-count">
+              best {topMachines.length} by net · <Link to="/machines">all machines</Link>
+            </span>
+          </h2>
+          <div className="cabs fixed-5">
+            {topMachines.map((m) => (
+              <CabinetCard key={m.machine_number} machine={m} onOpen={(n) => navigate(`/machines/${n}`)} />
+            ))}
+          </div>
+        </div>
+      )}
 
       {deadMachines.length > 0 && (
         <div className="panel">

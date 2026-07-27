@@ -76,6 +76,36 @@ describe('GET /api/dashboard — per-bucket chart data (regression: Profit trend
     assert.equal(day4.net_profit, -200);
   });
 
+  test('recentSheets carries the newest sheets first, with per-sheet expenses and net profit', async () => {
+    const res = await fetch(`${ctx.baseUrl}/api/dashboard?from=2026-08-01&to=2026-08-10&label=test`, { headers: { Cookie: cookie } });
+    const data = await res.json();
+
+    assert.equal(data.recentSheets.length, 1, 'only one sheet exists in this range');
+    const [s] = data.recentSheets;
+    assert.equal(s.sheet_date, '2026-08-03');
+    assert.equal(s.total_in, 100);
+    assert.equal(s.match_amount, 20);
+    assert.equal(s.expenses, 15, 'sheet-linked expenses only');
+    assert.equal(s.meter_profit, 30);
+    assert.equal(s.net_profit, 15, '30 meter profit - 15 expenses');
+  });
+
+  test('topMachines ranks by net and excludes machines that are not making money', async () => {
+    const res = await fetch(`${ctx.baseUrl}/api/dashboard?from=2026-08-01&to=2026-08-10&label=test`, { headers: { Cookie: cookie } });
+    const data = await res.json();
+
+    assert.ok(data.topMachines.length >= 1);
+    const [best] = data.topMachines;
+    assert.equal(best.machine_number, 1);
+    assert.equal(best.net, 50); // 100 in - 50 out
+    assert.equal(best.hold_pct, 50);
+    assert.equal(best.flag, 'profit', 'carries the same state flag the machines list uses');
+
+    const nets = data.topMachines.map((m) => m.net);
+    assert.deepEqual(nets, [...nets].sort((a, b) => b - a), 'ranked best first');
+    assert.ok(nets.every((n) => n > 0), 'a machine that lost money is not a "top performer"');
+  });
+
   test('buckets are sorted chronologically', async () => {
     const res = await fetch(`${ctx.baseUrl}/api/dashboard?from=2026-08-01&to=2026-08-10&label=test`, { headers: { Cookie: cookie } });
     const data = await res.json();

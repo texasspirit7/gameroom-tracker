@@ -97,7 +97,10 @@ a:hover { color: var(--ink); }
 
 /* ---------- Content shell ---------- */
 
-.content { flex: 1; padding: 28px 32px; max-width: 1200px; position: relative; }
+/* min-width:0 is load-bearing — as a flex child .content defaults to min-width:auto, which
+   refuses to shrink below its content and pushes the page into horizontal scroll at widths
+   between the mobile breakpoint and ~1200px. */
+.content { flex: 1; min-width: 0; padding: 28px 32px; max-width: 1200px; position: relative; }
 .content > * { position: relative; z-index: 1; }
 .page-title { margin: 0 0 4px; font-size: 24px; color: var(--ink); letter-spacing: -0.01em; }
 .page-sub { color: var(--muted); font-size: 13px; margin-bottom: 22px; }
@@ -273,6 +276,22 @@ tr.gap-row td:first-child { color: var(--bad); }
 .cab-body { padding: 14px; }
 .cab-fig { display: flex; justify-content: space-between; font-size: 12px; margin-bottom: 6px; color: var(--muted); }
 .cab-fig span:last-child { font-family: var(--mono); font-variant-numeric: tabular-nums; color: var(--ink); }
+/* The bottom-line figure on a tile — ruled off from the components above it */
+.cab-fig-total {
+  margin-top: 10px; padding-top: 10px; margin-bottom: 0;
+  border-top: 1px solid var(--line-soft); font-weight: 600;
+}
+
+/* Dashboard summary strips want a fixed column count, not the machines page's auto-fill */
+.cabs.fixed-3 { grid-template-columns: repeat(3, 1fr); }
+.cabs.fixed-5 { grid-template-columns: repeat(5, 1fr); }
+@media (max-width: 1240px) { .cabs.fixed-5 { grid-template-columns: repeat(3, 1fr); } }
+@media (max-width: 860px) {
+  .cabs.fixed-3, .cabs.fixed-5 { grid-template-columns: repeat(2, 1fr); }
+}
+@media (max-width: 520px) {
+  .cabs.fixed-3, .cabs.fixed-5 { grid-template-columns: 1fr; }
+}
 
 /* Hold gauge: position on a bleeding -> holding range, so "-1650%" doesn't have to be read cold */
 .gauge { margin-top: 12px; }

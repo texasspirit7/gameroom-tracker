@@ -2,20 +2,11 @@ import { useEffect, useMemo, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { api, fmt, signedMoney } from '../api.js';
 import { useDateRange } from '../DateRangeContext.jsx';
+import CabinetCard from '../components/CabinetCard.jsx';
 
 // Worst-first: bleeding > negative > dead > (no flag) > profit
 const FLAG_RANK = { bleeding: 0, negative: 1, dead: 2, profit: 4 };
 const flagRank = (f) => FLAG_RANK[f] ?? 3;
-
-// The word a cabinet wears on its plate — read before any number.
-const STATE_LABEL = { profit: 'Holding', bleeding: 'Bleeding', negative: 'Negative', dead: 'No play' };
-
-/**
- * Where a machine sits on a bleeding → holding range, as a 0–100% track position.
- * Break-even (0% hold) sits dead centre; anything at or past −100% pins to the far left, so a
- * wild figure like −1650% still renders somewhere sensible instead of blowing out the track.
- */
-const gaugePos = (holdPct) => Math.min(100, Math.max(0, (holdPct + 100) / 2));
 
 const SORTS = {
   number: (a, b) => a.machine_number - b.machine_number,
@@ -92,39 +83,7 @@ export default function Machines() {
         ) : view === 'cabs' ? (
           <div className="cabs">
             {sorted.map((m) => (
-              <div
-                key={m.machine_number}
-                className="cab"
-                role="button"
-                tabIndex={0}
-                onClick={() => navigate(`/machines/${m.machine_number}`)}
-                onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); navigate(`/machines/${m.machine_number}`); } }}
-              >
-                <div className="cab-plate">
-                  <span className="cab-no">#{m.machine_number}</span>
-                  <span className={`cab-state ${m.flag || 'dead'}`}>{STATE_LABEL[m.flag] || 'Even'}</span>
-                </div>
-                <div className="cab-body">
-                  <div className="cab-fig"><span>In</span><span>${fmt(m.total_in)}</span></div>
-                  <div className="cab-fig"><span>Out</span><span>${fmt(m.total_out)}</span></div>
-                  <div className="cab-fig">
-                    <span>Net</span>
-                    <span className={m.net >= 0 ? 'pos' : 'neg'}>{signedMoney(m.net)}</span>
-                  </div>
-                  <div className="gauge">
-                    <div className={`gauge-track${m.hold_pct == null ? ' empty' : ''}`}>
-                      <i
-                        className={`gauge-pin${m.hold_pct == null ? ' empty' : ''}`}
-                        style={{ '--at': `${m.hold_pct == null ? 50 : gaugePos(m.hold_pct)}%` }}
-                      />
-                    </div>
-                    <div className="gauge-cap">
-                      <span>Hold</span>
-                      <b>{m.hold_pct == null ? '—' : `${m.hold_pct}%`}</b>
-                    </div>
-                  </div>
-                </div>
-              </div>
+              <CabinetCard key={m.machine_number} machine={m} onOpen={(n) => navigate(`/machines/${n}`)} />
             ))}
           </div>
         ) : (
