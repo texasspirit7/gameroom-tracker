@@ -42,17 +42,27 @@ export function verifyLocalCredential({ name, email }) {
   return { email: cleanEmail, name: cleanName, picture: null };
 }
 
+/** Approved admins currently on the system — used to decide whether break-glass recovery applies. */
+const adminCount = () =>
+  db.prepare("SELECT COUNT(*) AS n FROM users WHERE role = 'admin' AND status = 'approved'").get().n;
+
 export function findOrCreateUser({ email, name, picture }) {
-  const isAdmin = config.adminEmails.includes(email);
+  const listedAsAdmin = config.adminEmails.includes(email);
   const existing = db.prepare('SELECT * FROM users WHERE email = ?').get(email);
   if (existing) {
-    // Keep profile fresh; promote to admin if added to ADMIN_EMAILS later
+    // ADMIN_EMAILS seeds access; it does not govern it. Re-applying it on every sign-in meant
+    // demoting (or blocking) a listed address in the admin UI silently reverted the moment that
+    // person logged in again — config quietly overruling a deliberate admin decision.
+    //
+    // The single exception is recovery: if no approved admin is left, a listed address can still
+    // get back in, so a bad demotion can't lock everyone out of the system permanently.
+    const rescue = listedAsAdmin && adminCount() === 0;
     db.prepare(
       `UPDATE users SET name = ?, picture = ?,
          role = CASE WHEN ? THEN 'admin' ELSE role END,
          status = CASE WHEN ? THEN 'approved' ELSE status END
        WHERE id = ?`
-    ).run(name, picture, isAdmin ? 1 : 0, isAdmin ? 1 : 0, existing.id);
+    ).run(name, picture, rescue ? 1 : 0, rescue ? 1 : 0, existing.id);
     return db.prepare('SELECT * FROM users WHERE id = ?').get(existing.id);
   }
   const result = db.prepare(
@@ -62,9 +72,9 @@ export function findOrCreateUser({ email, name, picture }) {
     email,
     name,
     picture,
-    isAdmin ? 'admin' : 'user',
-    isAdmin ? 'approved' : 'pending',
-    isAdmin ? new Date().toISOString() : null
+    listedAsAdmin ? 'admin' : 'user',
+    listedAsAdmin ? 'approved' : 'pending',
+    listedAsAdmin ? new Date().toISOString() : null
   );
   return db.prepare('SELECT * FROM users WHERE id = ?').get(result.lastInsertRowid);
 }
