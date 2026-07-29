@@ -2,7 +2,7 @@ import { useEffect, useMemo, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { api, fmt, signedMoney } from '../api.js';
 import { useDateRange } from '../DateRangeContext.jsx';
-import CabinetCard from '../components/CabinetCard.jsx';
+import CabinetCard, { netBounds } from '../components/CabinetCard.jsx';
 
 // Worst-first: bleeding > negative > dead > (no flag) > profit
 const FLAG_RANK = { bleeding: 0, negative: 1, dead: 2, profit: 4 };
@@ -38,6 +38,10 @@ export default function Machines() {
     () => (data ? [...data.machines].sort(SORTS[sort]) : []),
     [data, sort]
   );
+
+  // Shading scale comes from the whole range, not the sorted slice, so re-sorting never
+  // changes what a given colour means.
+  const bounds = useMemo(() => netBounds(data?.machines ?? []), [data]);
 
   if (error) return <div className="error-box">{error}</div>;
   if (!data) return <p className="muted"><span className="spinner" />Loading…</p>;
@@ -81,11 +85,25 @@ export default function Machines() {
         {rows.length === 0 ? (
           <p className="muted">No readings in this range.</p>
         ) : view === 'cabs' ? (
-          <div className="cabs">
-            {sorted.map((m) => (
-              <CabinetCard key={m.machine_number} machine={m} onOpen={(n) => navigate(`/machines/${n}`)} />
-            ))}
-          </div>
+          <>
+            <div className="tint-legend">
+              <span>Shading tracks net profit against the best machine in this range</span>
+              <i className="tint-scale" aria-hidden="true" />
+              <span className="tint-key"><i style={{ background: 'rgba(255,107,107,0.85)' }} />Bleeding</span>
+              <span className="tint-key"><i style={{ background: 'rgba(70,217,138,0.85)' }} />Holding</span>
+              <span className="tint-key"><i style={{ background: 'rgba(116,137,127,0.5)' }} />No play</span>
+            </div>
+            <div className="cabs">
+              {sorted.map((m) => (
+                <CabinetCard
+                  key={m.machine_number}
+                  machine={m}
+                  bounds={bounds}
+                  onOpen={(n) => navigate(`/machines/${n}`)}
+                />
+              ))}
+            </div>
+          </>
         ) : (
           <table>
             <thead>

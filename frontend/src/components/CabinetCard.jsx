@@ -10,14 +10,52 @@ const STATE_LABEL = { profit: 'Holding', bleeding: 'Bleeding', negative: 'Negati
  */
 export const gaugePos = (holdPct) => Math.min(100, Math.max(0, (holdPct + 100) / 2));
 
+// Matches --good / --bad / --muted in App.css. Kept as RGB triples so the strength of the
+// tint can be varied per machine, which a flat token can't express.
+const RGB = { win: '70,217,138', loss: '255,107,107', none: '116,137,127' };
+
+/** The best and worst net in a set — the scale every card in that set is shaded against. */
+export function netBounds(machines) {
+  const nets = machines.filter((m) => m.hold_pct != null).map((m) => m.net);
+  return { maxNet: Math.max(0, ...nets), minNet: Math.min(0, ...nets) };
+}
+
+/**
+ * How strongly to tint a cabinet, and in which direction.
+ *
+ * Earners shade green in proportion to the best machine in the current range, so the top
+ * performer is the most saturated and the shading fades toward neutral as profit approaches
+ * break-even. Machines paying out more than they take shade red on the same relative scale,
+ * and machines with no play at all stay grey rather than reading as "barely break-even" —
+ * no play is a different condition from earning nothing.
+ *
+ * Scaling is relative rather than absolute so the range filter can't wash the whole grid out:
+ * one day's takings and a year's would otherwise land at wildly different intensities.
+ */
+export function machineTint(m, { maxNet = 0, minNet = 0 } = {}) {
+  if (m.hold_pct == null || m.flag === 'dead') return { rgb: RGB.none, strength: 0 };
+  if (m.net > 0) return { rgb: RGB.win, strength: maxNet > 0 ? m.net / maxNet : 1 };
+  if (m.net < 0) return { rgb: RGB.loss, strength: minNet < 0 ? m.net / minNet : 1 };
+  return { rgb: RGB.none, strength: 0 };
+}
+
 /** One machine as a cabinet: brass number plate, its figures, and a hold gauge. */
-export default function CabinetCard({ machine: m, onOpen }) {
+export default function CabinetCard({ machine: m, onOpen, bounds }) {
   const noReadings = m.hold_pct == null;
+  const { rgb, strength } = machineTint(m, bounds);
+  // Floor the alpha so a small but real profit still reads as green rather than vanishing.
+  const edgeAlpha = strength > 0 ? 0.3 + 0.7 * strength : 0.3;
+  const washAlpha = strength > 0 ? 0.03 + 0.11 * strength : 0;
+
   return (
     <div
       className="cab"
       role="button"
       tabIndex={0}
+      style={{
+        '--tint': `rgba(${rgb}, ${edgeAlpha.toFixed(3)})`,
+        '--tint-wash': `rgba(${rgb}, ${washAlpha.toFixed(3)})`,
+      }}
       onClick={() => onOpen(m.machine_number)}
       onKeyDown={(e) => {
         if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); onOpen(m.machine_number); }

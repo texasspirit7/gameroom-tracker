@@ -250,14 +250,32 @@ tr.gap-row td:first-child { color: var(--bad); }
 
 /* ---------- Cabinet cards (machines grid) ---------- */
 
+.tint-legend {
+  display: flex; align-items: center; gap: 14px; flex-wrap: wrap;
+  font-size: 11px; color: var(--muted); margin: -4px 0 14px;
+}
+/* The continuous ramp the cabinets are shaded along, shown as one strip */
+.tint-scale {
+  width: 84px; height: 6px; border-radius: 3px; flex-shrink: 0;
+  background: linear-gradient(90deg, rgba(70,217,138,0.3), rgba(70,217,138,1));
+}
+.tint-key { display: inline-flex; align-items: center; gap: 5px; }
+.tint-key i { width: 9px; height: 9px; border-radius: 2px; display: inline-block; }
+
 .cabs { display: grid; grid-template-columns: repeat(auto-fill, minmax(228px, 1fr)); gap: 14px; }
+/* The left edge and a wash carry how the machine is performing — strength is set per card in
+   CabinetCard.jsx, scaled against the best and worst earner in the current range. */
 .cab {
-  background: linear-gradient(180deg, var(--panel), var(--sunk));
-  border: 1px solid var(--line); border-radius: var(--radius);
+  background:
+    linear-gradient(90deg, var(--tint-wash, transparent), transparent 55%),
+    linear-gradient(180deg, var(--panel), var(--sunk));
+  border: 1px solid var(--line);
+  border-left: 4px solid var(--tint, var(--line));
+  border-radius: var(--radius);
   overflow: hidden; cursor: pointer;
   transition: transform 0.15s ease, border-color 0.15s ease;
 }
-.cab:hover { transform: translateY(-2px); border-color: var(--accent-2); }
+.cab:hover { transform: translateY(-2px); border-color: var(--accent-2); border-left-color: var(--tint, var(--accent-2)); }
 /* The number plate — a cabinet wears its number on a brass tag */
 .cab-plate {
   display: flex; align-items: center; justify-content: space-between; gap: 8px;

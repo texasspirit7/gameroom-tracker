@@ -8,7 +8,7 @@ import { api, fmt, signedMoney } from '../api.js';
 import { CHART, axisProps, tooltipProps } from '../chartTheme.js';
 import { useDateRange } from '../DateRangeContext.jsx';
 import { useAuth } from '../AuthContext.jsx';
-import CabinetCard from '../components/CabinetCard.jsx';
+import CabinetCard, { netBounds } from '../components/CabinetCard.jsx';
 
 const weekday = (iso) => new Date(`${iso}T00:00:00Z`).toLocaleDateString('en-US', { weekday: 'short', timeZone: 'UTC' });
 
@@ -216,7 +216,12 @@ export default function Dashboard() {
           </h2>
           <div className="cabs fixed-5">
             {topMachines.map((m) => (
-              <CabinetCard key={m.machine_number} machine={m} onOpen={(n) => navigate(`/machines/${n}`)} />
+              <CabinetCard
+                key={m.machine_number}
+                machine={m}
+                bounds={netBounds(topMachines)}
+                onOpen={(n) => navigate(`/machines/${n}`)}
+              />
             ))}
           </div>
         </div>
