@@ -5,8 +5,15 @@ import { adminGate } from '../auth.js';
 export const profitSplitRouter = Router();
 
 const MONTH_RE = /^\d{4}-\d{2}$/;
-const SPLIT_A = 0.4; // 40%
+const SPLIT_A = 0.4; // 40% — the recouping side
 const SPLIT_B = 0.6; // 60%
+
+/**
+ * Money the 40% side takes in full before the split starts. Every month's net profit goes
+ * entirely to them — however many months that takes — until this much has been received;
+ * only what's left over that month, and every month after, is split 40/60.
+ */
+const RECOUP_TARGET = 30000;
 
 function monthsBetween(start, end) {
   const months = [];
@@ -51,15 +58,34 @@ export function buildProfitSplitRows() {
   const start = months.sort()[0];
   const end = thisMonth > start ? thisMonth : start;
 
+  // Walked oldest-first because the recoup carries forward: what a month splits depends on how
+  // much has already been recovered before it. Reversed at the end for display.
+  let recovered = 0;
   const rows = monthsBetween(start, end).map((month) => {
     const net = netByMonth.get(month) || 0;
+    const outstanding = Math.max(0, RECOUP_TARGET - recovered);
+
+    // While money is still owed, the whole month sits with the 40% side — a losing month
+    // included, so `recovered` stays an honest tally of what has actually been received
+    // rather than only counting the good months.
+    const recoupAmount = outstanding > 0 ? Math.min(net, outstanding) : 0;
+    recovered = Math.max(0, recovered + recoupAmount);
+
+    // Whatever the recoup didn't claim is what the 40/60 applies to.
+    const splitBase = net - recoupAmount;
     const paidRow = paidByMonth.get(month);
+
     return {
       month,
       net_profit: net,
-      split_label: '40/60',
-      amount_40: net * SPLIT_A,
-      amount_60: net * SPLIT_B,
+      split_label: outstanding > 0 ? 'recoup' : '40/60',
+      recoup_amount: recoupAmount,
+      split_base: splitBase,
+      recovered_to_date: recovered,
+      recoup_target: RECOUP_TARGET,
+      recoup_remaining: Math.max(0, RECOUP_TARGET - recovered),
+      amount_40: recoupAmount + splitBase * SPLIT_A,
+      amount_60: splitBase * SPLIT_B,
       paid: Boolean(paidRow?.paid),
       paid_at: paidRow?.paid_at || null,
       paid_by: paidRow?.paid_by || null,

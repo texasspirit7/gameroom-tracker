@@ -269,6 +269,21 @@ tr.gap-row td:first-child { color: var(--bad); }
 
 /* ---------- Cabinet cards (machines grid) ---------- */
 
+/* How much of the recoup target has been paid back so far */
+.recoup-bar {
+  height: 10px; border-radius: 5px; background: var(--sunk);
+  border: 1px solid var(--line); overflow: hidden;
+}
+.recoup-bar i {
+  display: block; height: 100%;
+  background: linear-gradient(90deg, var(--accent-2), var(--accent));
+}
+.recoup-cap {
+  display: flex; justify-content: space-between; margin-top: 8px;
+  font-size: 12px; color: var(--muted); font-variant-numeric: tabular-nums;
+}
+.recoup-cap strong { color: var(--ink); font-family: var(--mono); }
+
 .tint-legend {
   display: flex; align-items: center; gap: 14px; flex-wrap: wrap;
   font-size: 11px; color: var(--muted); margin: -4px 0 14px;

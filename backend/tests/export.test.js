@@ -114,11 +114,12 @@ describe('/api/export — CSV downloads', () => {
 
     const csvRes = await fetch(`${ctx.baseUrl}/api/export/profit-split.csv`, { headers: { Cookie: adminCookie } });
     const { header, rows } = parseCsv(await csvRes.text());
-    assert.deepEqual(header, ['Month', 'Split', 'Net Profit', '40% Amount', '60% Amount', 'Paid', 'Paid At', 'Paid By', 'Notes']);
+    assert.deepEqual(header, ['Month', 'Split', 'Net Profit', 'To Recoup', 'Split Base', 'Recovered To Date', '40% Amount', '60% Amount', 'Paid', 'Paid At', 'Paid By', 'Notes']);
     const csvRow = rows.find((r) => r[0] === '2026-12');
     assert.ok(csvRow);
     assert.equal(Number(csvRow[2]), decRow.net_profit);
-    assert.equal(Number(csvRow[3]), decRow.amount_40);
+    assert.equal(Number(csvRow[3]), decRow.recoup_amount);
+    assert.equal(Number(csvRow[6]), decRow.amount_40);
   });
 
   test('no from/to params exports everything on record rather than erroring', async () => {

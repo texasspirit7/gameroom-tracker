@@ -43,15 +43,19 @@ describe('/api/profit-split — admin-only page', () => {
     assert.equal(res.status, 403);
   });
 
-  test('admin gets 200 with one row for the month, net profit and 40/60 split amounts', async () => {
+  test('while the recoup is outstanding the whole month goes to the 40% side', async () => {
     const res = await fetch(`${ctx.baseUrl}/api/profit-split`, { headers: { Cookie: adminCookie } });
     assert.equal(res.status, 200);
     const rows = await res.json();
     const row = rows.find((r) => r.month === '2026-04');
     assert.ok(row, 'expected a row for 2026-04');
     assert.equal(row.net_profit, 50); // (100+0)-(50+0)
-    assert.equal(row.amount_40, 20);
-    assert.equal(row.amount_60, 30);
+    // Far short of the 30k recoup, so nothing reaches the 40/60 yet.
+    assert.equal(row.split_label, 'recoup');
+    assert.equal(row.recoup_amount, 50);
+    assert.equal(row.split_base, 0);
+    assert.equal(row.amount_40, 50);
+    assert.equal(row.amount_60, 0);
     assert.equal(row.paid, false);
   });
 

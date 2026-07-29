@@ -45,13 +45,38 @@ export default function ProfitSplit() {
   if (error && !rows) return <div className="error-box">{error}</div>;
   if (!rows) return <p className="muted"><span className="spinner" />Loading…</p>;
 
+  // Rows come newest-first, so the first one carries the running recoup total.
+  const latest = rows[0];
+  const recoupTarget = latest?.recoup_target ?? 0;
+
   return (
     <>
       <h1 className="page-title">Profit Split</h1>
       <div className="page-sub">
-        Monthly net profit (after overhead) split 40/60, and whether that month's payout has been made.
+        Monthly net profit (after overhead). The 40% side takes every month in full until
+        ${fmt(recoupTarget)} has been recovered; from there it splits 40/60.
       </div>
       {error && <div className="error-box">{error}</div>}
+
+      {latest && (
+        <div className="panel">
+          <h2>
+            Recoup progress
+            <span className="panel-count">
+              {latest.recoup_remaining > 0
+                ? `$${fmt(latest.recoup_remaining)} still to recover`
+                : 'fully recovered — now splitting 40/60'}
+            </span>
+          </h2>
+          <div className="recoup-bar">
+            <i style={{ width: `${Math.min(100, (latest.recovered_to_date / recoupTarget) * 100)}%` }} />
+          </div>
+          <div className="recoup-cap">
+            <span><strong>${fmt(latest.recovered_to_date)}</strong> recovered</span>
+            <span>${fmt(recoupTarget)} target</span>
+          </div>
+        </div>
+      )}
 
       <div className="panel">
         {rows.length === 0 ? (
@@ -60,16 +85,23 @@ export default function ProfitSplit() {
           <table>
             <thead>
               <tr>
-                <th>Month</th><th>Split</th><th>Net Profit</th>
+                <th>Month</th>
+                <th>Net Profit</th>
+                <th title="Taken in full by the 40% side until the target is recovered">To Recoup</th>
+                <th title="What's left after the recoup — this is what gets split 40/60">Split Base</th>
                 <th>40% Amount</th><th>60% Amount</th><th>Paid</th><th>Comments</th>
               </tr>
             </thead>
             <tbody>
               {rows.map((r) => (
                 <tr key={r.month}>
-                  <td>{monthLabel(r.month)}</td>
-                  <td>{r.split_label}</td>
+                  <td>
+                    {monthLabel(r.month)}
+                    {r.recoup_amount > 0 && <span className="badge review" style={{ marginLeft: 8 }}>recoup</span>}
+                  </td>
                   <td className={r.net_profit >= 0 ? 'pos' : 'neg'}>{signedMoney(r.net_profit)}</td>
+                  <td>{r.recoup_amount ? `$${fmt(r.recoup_amount)}` : '—'}</td>
+                  <td>{r.split_base ? `$${fmt(r.split_base)}` : '—'}</td>
                   <td>${fmt(r.amount_40)}</td>
                   <td>${fmt(r.amount_60)}</td>
                   <td>
