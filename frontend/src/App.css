@@ -263,11 +263,13 @@ tr.gap-row td:first-child { color: var(--bad); }
 .tint-key i { width: 9px; height: 9px; border-radius: 2px; display: inline-block; }
 
 .cabs { display: grid; grid-template-columns: repeat(auto-fill, minmax(228px, 1fr)); gap: 14px; }
-/* The left edge and a wash carry how the machine is performing — strength is set per card in
-   CabinetCard.jsx, scaled against the best and worst earner in the current range. */
+/* The whole tile is filled with how the machine is performing, with the left edge as the
+   strongest read — strength is set per card in CabinetCard.jsx, scaled against the best and
+   worst earner in the current range. The flat fill sits as its own layer over the base
+   gradient so the card keeps its depth instead of going matte. */
 .cab {
   background:
-    linear-gradient(90deg, var(--tint-wash, transparent), transparent 55%),
+    linear-gradient(0deg, var(--tint-fill, transparent), var(--tint-fill, transparent)),
     linear-gradient(180deg, var(--panel), var(--sunk));
   border: 1px solid var(--line);
   border-left: 4px solid var(--tint, var(--line));
@@ -292,7 +294,10 @@ tr.gap-row td:first-child { color: var(--bad); }
 .cab-state.negative { color: var(--warn); background: rgba(240,180,41,0.12); }
 .cab-state.dead { color: var(--muted); background: rgba(116,137,127,0.12); }
 .cab-body { padding: 14px; }
-.cab-fig { display: flex; justify-content: space-between; font-size: 12px; margin-bottom: 6px; color: var(--muted); }
+/* Lighter than --muted elsewhere on purpose: these labels sit on the tint fill, and at full
+   strength --muted falls to ~2.5:1 against it. This keeps them legible on every tile while
+   staying clearly secondary to the values beside them. */
+.cab-fig { display: flex; justify-content: space-between; font-size: 12px; margin-bottom: 6px; color: var(--ink-2); }
 .cab-fig span:last-child { font-family: var(--mono); font-variant-numeric: tabular-nums; color: var(--ink); }
 /* The bottom-line figure on a tile — ruled off from the components above it */
 .cab-fig-total {
@@ -326,7 +331,7 @@ tr.gap-row td:first-child { color: var(--bad); }
 }
 .gauge-pin.empty { background: var(--muted); box-shadow: none; }
 .gauge-cap {
-  display: flex; justify-content: space-between; font-size: 10px; color: var(--muted);
+  display: flex; justify-content: space-between; font-size: 10px; color: var(--ink-2);
   margin-top: 7px; letter-spacing: 0.06em; text-transform: uppercase;
 }
 .gauge-cap b { font-family: var(--mono); color: var(--ink-2); font-weight: 600; }

@@ -44,8 +44,10 @@ export default function CabinetCard({ machine: m, onOpen, bounds }) {
   const noReadings = m.hold_pct == null;
   const { rgb, strength } = machineTint(m, bounds);
   // Floor the alpha so a small but real profit still reads as green rather than vanishing.
-  const edgeAlpha = strength > 0 ? 0.3 + 0.7 * strength : 0.3;
-  const washAlpha = strength > 0 ? 0.03 + 0.11 * strength : 0;
+  const edgeAlpha = strength > 0 ? 0.35 + 0.65 * strength : 0.3;
+  // The fill covers the whole tile, so it tops out well below the edge: past roughly 0.26 the
+  // muted labels and the hold gauge start losing contrast against it.
+  const fillAlpha = strength > 0 ? 0.07 + 0.19 * strength : 0.045;
 
   return (
     <div
@@ -54,7 +56,7 @@ export default function CabinetCard({ machine: m, onOpen, bounds }) {
       tabIndex={0}
       style={{
         '--tint': `rgba(${rgb}, ${edgeAlpha.toFixed(3)})`,
-        '--tint-wash': `rgba(${rgb}, ${washAlpha.toFixed(3)})`,
+        '--tint-fill': `rgba(${rgb}, ${fillAlpha.toFixed(3)})`,
       }}
       onClick={() => onOpen(m.machine_number)}
       onKeyDown={(e) => {
