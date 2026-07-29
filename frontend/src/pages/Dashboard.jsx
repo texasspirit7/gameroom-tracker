@@ -230,9 +230,11 @@ export default function Dashboard() {
       {deadMachines.length > 0 && (
         <div className="panel">
           <h2>Machines with no play — {range.label}</h2>
-          <p style={{ fontSize: 13 }}>
+          {/* gap rather than per-link margin — a trailing margin on the last link overflowed
+              the panel and left it with a scrollbar. */}
+          <p style={{ fontSize: 13, display: 'flex', flexWrap: 'wrap', gap: 10, margin: 0 }}>
             {deadMachines.map((n) => (
-              <Link key={n} to={`/machines/${n}`} style={{ marginRight: 10 }}>#{n}</Link>
+              <Link key={n} to={`/machines/${n}`}>#{n}</Link>
             ))}
           </p>
         </div>

@@ -90,20 +90,30 @@ export default function Sheets() {
         {months.length === 0 ? (
           <p className="muted">Nothing uploaded yet.</p>
         ) : (
-          <table>
+          <table className="sheets-table">
             <thead>
               <tr>
-                <th>Month</th><th>Sheets</th><th>Total In</th><th>Total Out</th>
-                <th>Match</th><th>Expenses</th><th>Meter Profit</th><th>Net Profit (After Overhead)</th>
-                <th>Warnings</th><th title="Days with no sheet, between the first and last sheet on record">Gaps</th>
+                {/* Headers are abbreviated to the same vocabulary the cabinet cards use —
+                    spelled out they drove columns twice as wide as the figures inside them. */}
+                <th>Month / Date</th>
+                <th>Detail</th>
+                <th title="Total In">In</th>
+                <th title="Total Out">Out</th>
+                <th>Match</th>
+                <th>Expenses</th>
+                <th title="Meter profit">Meter</th>
+                <th title="Net profit — meter profit minus expenses">Net</th>
+                <th title="Validation warnings">Warn</th>
+                <th title="Verified / review for a sheet; days with no sheet for a month">Status</th>
+                {canModify && <th aria-label="Actions" />}
               </tr>
             </thead>
             <tbody>
               {months.map((g) => (
                 <Fragment key={g.key}>
-                  <tr className="clickable" onClick={() => setExpandedMonth(expandedMonth === g.key ? null : g.key)}>
+                  <tr className="clickable month-row" onClick={() => setExpandedMonth(expandedMonth === g.key ? null : g.key)}>
                     <td><strong>{expandedMonth === g.key ? '▾' : '▸'} {g.label}</strong></td>
-                    <td>{g.sheets.length}</td>
+                    <td>{g.sheets.length} sheet{g.sheets.length === 1 ? '' : 's'}</td>
                     <td>${fmt(g.total_in)}</td>
                     <td>${fmt(g.total_out)}</td>
                     <td>${fmt(g.match_amount)}</td>
@@ -113,70 +123,52 @@ export default function Sheets() {
                     <td>{g.warnings > 0 ? <span className="badge review">{g.warnings}</span> : '—'}</td>
                     <td>
                       {missingByMonth.get(g.key)?.length
-                        ? <span className="badge high">{missingByMonth.get(g.key).length}</span>
+                        ? <span className="badge high">{missingByMonth.get(g.key).length} gap{missingByMonth.get(g.key).length === 1 ? '' : 's'}</span>
                         : '—'}
                     </td>
+                    {canModify && <td />}
                   </tr>
-                  {expandedMonth === g.key && (
-                    <tr>
-                      <td colSpan={10} style={{ background: 'var(--sunk)' }}>
-                        <table style={{ margin: '8px 0' }}>
-                          <thead>
-                            <tr>
-                              <th>Date</th><th>Day</th><th></th><th>Source</th><th>Total In</th><th>Total Out</th>
-                              <th>Match</th><th>Expenses</th><th>Meter Profit</th><th>Net Profit (After Overhead)</th>
-                              <th>Warnings</th><th>Status</th>
-                              {canModify && <th></th>}
-                            </tr>
-                          </thead>
-                          <tbody>
-                            {mergeGaps(g.sheets, missingByMonth.get(g.key)).map((r) => (r.kind === 'gap' ? (
-                              <tr key={`gap-${r.date}`} className="gap-row">
-                                <td>{r.date}</td>
-                                <td>{weekday(r.date)}</td>
-                                <td colSpan={9}>No sheet on record</td>
-                                <td><span className="badge high">Gap</span></td>
-                                {canModify && <td />}
-                              </tr>
-                            ) : (
-                              ((s) => (
-                              <tr key={s.id} className="clickable" onClick={() => navigate(`/sheets/${s.id}`)}>
-                                <td>{s.sheet_date}</td>
-                                <td>{weekday(s.sheet_date)}</td>
-                                <td>
-                                  {s.has_file && (
-                                    <a
-                                      href={`/api/sheets/${s.id}/file`}
-                                      title="Download uploaded sheet"
-                                      className="attachment-link"
-                                      onClick={(e) => e.stopPropagation()}
-                                    >
-                                      📎
-                                    </a>
-                                  )}
-                                </td>
-                                <td>{s.source}</td>
-                                <td>${fmt(s.total_in)}</td>
-                                <td>${fmt(s.total_out)}</td>
-                                <td>${fmt(s.match_amount)}</td>
-                                <td>${fmt(s.expenses)}</td>
-                                <td className={s.meter_profit >= 0 ? 'pos' : 'neg'}>{signedMoney(s.meter_profit)}</td>
-                                <td className={s.net_profit >= 0 ? 'pos' : 'neg'}>{signedMoney(s.net_profit)}</td>
-                                <td>{s.warnings > 0 ? <span className="badge review">{s.warnings}</span> : '—'}</td>
-                                <td><span className={`badge ${s.status}`}>{s.status}</span></td>
-                                {canModify && (
-                                  <td>
-                                    <button className="danger row-action" onClick={(e) => remove(e, s)}>Delete</button>
-                                  </td>
-                                )}
-                              </tr>
-                              ))(r.s)
-                            )))}
-                          </tbody>
-                        </table>
-                      </td>
+
+                  {expandedMonth === g.key && mergeGaps(g.sheets, missingByMonth.get(g.key)).map((r) => (r.kind === 'gap' ? (
+                    <tr key={`gap-${r.date}`} className="child-row gap-row">
+                      <td>{r.date}</td>
+                      <td>{weekday(r.date)}</td>
+                      <td colSpan={6}>No sheet on record</td>
+                      <td />
+                      <td><span className="badge high">Gap</span></td>
+                      {canModify && <td />}
                     </tr>
-                  )}
+                  ) : (
+                    <tr key={r.s.id} className="clickable child-row" onClick={() => navigate(`/sheets/${r.s.id}`)}>
+                      <td>
+                        {r.s.sheet_date}
+                        {r.s.has_file && (
+                          <a
+                            href={`/api/sheets/${r.s.id}/file`}
+                            title="Download uploaded sheet"
+                            className="attachment-link"
+                            onClick={(e) => e.stopPropagation()}
+                          >
+                            📎
+                          </a>
+                        )}
+                      </td>
+                      <td>{weekday(r.s.sheet_date)} · {r.s.source}</td>
+                      <td>${fmt(r.s.total_in)}</td>
+                      <td>${fmt(r.s.total_out)}</td>
+                      <td>${fmt(r.s.match_amount)}</td>
+                      <td>${fmt(r.s.expenses)}</td>
+                      <td className={r.s.meter_profit >= 0 ? 'pos' : 'neg'}>{signedMoney(r.s.meter_profit)}</td>
+                      <td className={r.s.net_profit >= 0 ? 'pos' : 'neg'}>{signedMoney(r.s.net_profit)}</td>
+                      <td>{r.s.warnings > 0 ? <span className="badge review">{r.s.warnings}</span> : '—'}</td>
+                      <td><span className={`badge ${r.s.status}`}>{r.s.status}</span></td>
+                      {canModify && (
+                        <td>
+                          <button className="danger row-action" onClick={(e) => remove(e, r.s)}>Delete</button>
+                        </td>
+                      )}
+                    </tr>
+                  )))}
                 </Fragment>
               ))}
             </tbody>

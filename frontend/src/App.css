@@ -100,7 +100,9 @@ a:hover { color: var(--ink); }
 /* min-width:0 is load-bearing — as a flex child .content defaults to min-width:auto, which
    refuses to shrink below its content and pushes the page into horizontal scroll at widths
    between the mobile breakpoint and ~1200px. */
-.content { flex: 1; min-width: 0; padding: 28px 32px; max-width: 1200px; position: relative; }
+/* 1400 rather than 1200 so data-dense tables get the room they need on a laptop instead of
+   scrolling inside a narrow column while the page sits in empty space. */
+.content { flex: 1; min-width: 0; padding: 28px 32px; max-width: 1400px; position: relative; }
 .content > * { position: relative; z-index: 1; }
 .page-title { margin: 0 0 4px; font-size: 24px; color: var(--ink); letter-spacing: -0.01em; }
 .page-sub { color: var(--muted); font-size: 13px; margin-bottom: 22px; }
@@ -189,9 +191,26 @@ th:first-child, td:first-child { text-align: left; font-family: inherit; }
 tbody tr:hover td { background: var(--accent-wash); }
 tr.clickable { cursor: pointer; }
 
+/* Daily Sheets: months and their sheets share one table rather than nesting a second, wider
+   one inside a cell — the nested table overflowed the panel and pushed the action column out
+   of reach. Child rows are set back and sunk instead. */
+/* This table carries 11 columns, so it runs tighter than the default and never wraps a cell:
+   a wrapped date reads as two rows, and the wrapping was costing enough width to push the
+   action column past the panel edge. */
+.sheets-table th, .sheets-table td { padding: 8px 9px; white-space: nowrap; }
+.sheets-table .child-row td { background: var(--sunk); }
+.sheets-table .child-row td:first-child { padding-left: 30px; position: relative; }
+.sheets-table .child-row td:first-child::before {
+  content: ''; position: absolute; left: 14px; top: 0; bottom: 0;
+  border-left: 1px solid var(--line);
+}
+.sheets-table .month-row td { font-weight: 600; }
+.sheets-table .attachment-link { margin-left: 8px; }
+
 /* A day with no sheet, shown inline in the sequence where it belongs */
 tr.gap-row td { color: var(--muted); background: rgba(255,107,107,0.045); }
 tr.gap-row td:first-child { color: var(--bad); }
+.sheets-table .child-row.gap-row td { background: rgba(255,107,107,0.05); }
 
 .attachment-link { text-decoration: none; font-size: 15px; opacity: 0.7; }
 .attachment-link:hover { opacity: 1; }
