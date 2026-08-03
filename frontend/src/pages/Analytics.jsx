@@ -4,6 +4,8 @@ import {
   ResponsiveContainer, BarChart, Bar, LineChart, Line, XAxis, YAxis, Tooltip, CartesianGrid, Cell, ReferenceLine, Legend,
 } from 'recharts';
 import { api, fmt, signedMoney } from '../api.js';
+import { useLocalDateRange } from '../DateRangeContext.jsx';
+import DateRangePicker from '../components/DateRangePicker.jsx';
 import { CHART, axisProps, tooltipProps } from '../chartTheme.js';
 
 // The six metrics selectable from the dropdown at the top of the page — every section below
@@ -26,7 +28,7 @@ function MetricValue({ value, metric }) {
   return <span className={metric.neutral ? '' : value >= 0 ? 'pos' : 'neg'}>{formatted}</span>;
 }
 
-function PeriodSection({ title, columnLabel, description, fetchSummary, fetchMachines, metric }) {
+function PeriodSection({ title, columnLabel, description, fetchSummary, fetchMachines, metric, query }) {
   const [rows, setRows] = useState(null);
   const [error, setError] = useState(null);
   const [selectedKey, setSelectedKey] = useState(null);
@@ -34,9 +36,12 @@ function PeriodSection({ title, columnLabel, description, fetchSummary, fetchMac
   const [machinesLoading, setMachinesLoading] = useState(false);
 
   useEffect(() => {
-    fetchSummary().then(setRows).catch((e) => setError(e.message));
+    setRows(null);
+    setSelectedKey(null);
+    setMachines(null);
+    fetchSummary(query).then(setRows).catch((e) => setError(e.message));
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
+  }, [query]);
 
   const select = async (row) => {
     if (selectedKey === row.key) {
@@ -48,7 +53,7 @@ function PeriodSection({ title, columnLabel, description, fetchSummary, fetchMac
     setMachines(null);
     setMachinesLoading(true);
     try {
-      const data = await fetchMachines(row.key);
+      const data = await fetchMachines(row.key, query);
       setMachines(data);
     } catch (e) {
       setError(e.message);
@@ -137,13 +142,14 @@ function PeriodSection({ title, columnLabel, description, fetchSummary, fetchMac
 
 const shortDate = (iso) => new Date(`${iso}T00:00:00Z`).toLocaleDateString('en-US', { month: 'short', day: 'numeric', timeZone: 'UTC' });
 
-function TrendSection() {
+function TrendSection({ query }) {
   const [data, setData] = useState(null);
   const [error, setError] = useState(null);
 
   useEffect(() => {
-    api.analyticsTrend().then(setData).catch((e) => setError(e.message));
-  }, []);
+    setData(null);
+    api.analyticsTrend(query).then(setData).catch((e) => setError(e.message));
+  }, [query]);
 
   if (error) return <div className="panel"><h2>Profit Trend</h2><div className="error-box">{error}</div></div>;
   if (!data) return <div className="panel"><h2>Profit Trend</h2><p className="muted"><span className="spinner" />Loading…</p></div>;
@@ -231,11 +237,14 @@ function LeaderboardSection() {
   );
 }
 
-function OverviewSection({ metric }) {
+function OverviewSection({ metric, query }) {
   const [data, setData] = useState(null);
   const [error, setError] = useState(null);
 
-  useEffect(() => { api.analyticsOverview().then(setData).catch((e) => setError(e.message)); }, []);
+  useEffect(() => {
+    setData(null);
+    api.analyticsOverview(query).then(setData).catch((e) => setError(e.message));
+  }, [query]);
 
   if (error) return <div className="panel"><h2>Overview</h2><div className="error-box">{error}</div></div>;
   if (!data) return <div className="panel"><h2>Overview</h2><p className="muted"><span className="spinner" />Loading…</p></div>;
@@ -268,6 +277,13 @@ export default function Analytics() {
   const [metricKey, setMetricKey] = useState('net_profit');
   const metric = METRICS.find((m) => m.key === metricKey);
 
+  // Its own range rather than the app-wide one, so this page always opens on All Time —
+  // narrowing the Dashboard shouldn't quietly narrow the trend and seasonality views too.
+  const range = useLocalDateRange('allTime');
+  const query = range.preset === 'allTime'
+    ? ''
+    : `?from=${range.from}&to=${range.to}&label=${encodeURIComponent(range.label)}`;
+
   return (
     <>
       <div className="toolbar">
@@ -281,6 +297,10 @@ export default function Analytics() {
         </div>
         <div className="spacer" />
         <label style={{ display: 'flex', flexDirection: 'column', gap: 4, fontSize: 12, color: 'var(--muted)', fontWeight: 600 }}>
+          Range
+          <DateRangePicker range={range} />
+        </label>
+        <label style={{ display: 'flex', flexDirection: 'column', gap: 4, fontSize: 12, color: 'var(--muted)', fontWeight: 600 }}>
           Metric
           <select value={metricKey} onChange={(e) => setMetricKey(e.target.value)} style={{ minWidth: 160 }}>
             {METRICS.map((m) => <option key={m.key} value={m.key}>{m.label}</option>)}
@@ -288,8 +308,8 @@ export default function Analytics() {
         </label>
       </div>
 
-      <OverviewSection metric={metric} />
-      <TrendSection />
+      <OverviewSection metric={metric} query={query} />
+      <TrendSection query={query} />
       <LeaderboardSection />
 
       <PeriodSection
@@ -299,6 +319,7 @@ export default function Analytics() {
         fetchSummary={api.analyticsWeekendSplit}
         fetchMachines={api.analyticsWeekendSplitMachines}
         metric={metric}
+        query={query}
       />
       <PeriodSection
         title="By Day of Week"
@@ -307,6 +328,7 @@ export default function Analytics() {
         fetchSummary={api.analyticsByWeekday}
         fetchMachines={api.analyticsByWeekdayMachines}
         metric={metric}
+        query={query}
       />
       <PeriodSection
         title="By Day of Month"
@@ -315,6 +337,7 @@ export default function Analytics() {
         fetchSummary={api.analyticsByDayOfMonth}
         fetchMachines={api.analyticsByDayOfMonthMachines}
         metric={metric}
+        query={query}
       />
       <PeriodSection
         title="By Pay Period"
@@ -323,6 +346,7 @@ export default function Analytics() {
         fetchSummary={api.analyticsByPayPeriod}
         fetchMachines={api.analyticsByPayPeriodMachines}
         metric={metric}
+        query={query}
       />
       <PeriodSection
         title="By Week"
@@ -331,6 +355,7 @@ export default function Analytics() {
         fetchSummary={api.analyticsByWeek}
         fetchMachines={api.analyticsByWeekMachines}
         metric={metric}
+        query={query}
       />
       <PeriodSection
         title="By Month"
@@ -339,6 +364,7 @@ export default function Analytics() {
         fetchSummary={api.analyticsByMonth}
         fetchMachines={api.analyticsByMonthMachines}
         metric={metric}
+        query={query}
       />
     </>
   );

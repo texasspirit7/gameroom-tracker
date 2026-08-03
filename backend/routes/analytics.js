@@ -1,6 +1,7 @@
 import { Router } from 'express';
 import { db } from '../db.js';
 import { adminGate } from '../auth.js';
+import { resolveRange } from './range.js';
 
 export const analyticsRouter = Router();
 
@@ -21,14 +22,23 @@ const weekStartISO = (iso) => {
 };
 const shortDate = (iso) => `${MONTHS[Number(iso.slice(5, 7)) - 1]} ${Number(iso.slice(8, 10))}`;
 
-/** Every sheet with its net profit (meter profit minus that sheet's own logged expenses). */
-function sheetsWithNetProfit() {
+/**
+ * Every sheet in the range with its net profit (meter profit minus that sheet's own logged
+ * expenses). resolveRange() falls back to the full span of recorded data, so "All Time"
+ * needs no special case here.
+ */
+function sheetsWithNetProfit({ from, to }) {
   return db.prepare(`
     SELECT s.id, s.sheet_date, s.total_in, s.total_out, s.match_amount, s.meter_profit,
            COALESCE((SELECT SUM(e.amount) FROM expenses e WHERE e.sheet_id = s.id), 0) AS sheet_expenses
     FROM sheets s
-  `).all().map((s) => ({ ...s, net_profit: s.meter_profit - s.sheet_expenses }));
+    WHERE s.sheet_date BETWEEN ? AND ?
+  `).all(from, to).map((s) => ({ ...s, net_profit: s.meter_profit - s.sheet_expenses }));
 }
+
+/** Sheet ids inside the range, for the per-machine drill-downs. */
+const sheetsInRange = ({ from, to }) =>
+  db.prepare('SELECT id, sheet_date FROM sheets WHERE sheet_date BETWEEN ? AND ?').all(from, to);
 
 function summarize(key, label, sheets) {
   const n = sheets.length;
@@ -83,9 +93,9 @@ function machineAverages(sheetIds) {
   `).all(...sheetIds).map((r) => ({ ...r, avg_net: r.avg_daily_in - r.avg_daily_out }));
 }
 
-// GET /api/analytics/weekday — average performance for each day of the week, across all history
+// GET /api/analytics/weekday?from=&to= — average performance for each day of the week in the range
 analyticsRouter.get('/weekday', adminGate, (req, res) => {
-  const sheets = sheetsWithNetProfit();
+  const sheets = sheetsWithNetProfit(resolveRange(req));
   const byDay = new Map();
   for (const s of sheets) {
     const wd = new Date(`${s.sheet_date}T00:00:00Z`).getUTCDay();
@@ -101,7 +111,7 @@ analyticsRouter.get('/weekday', adminGate, (req, res) => {
 // GET /api/analytics/weekday/:day/machines — per-machine averages for all sheets on that weekday
 analyticsRouter.get('/weekday/:day/machines', adminGate, (req, res) => {
   const day = Number(req.params.day);
-  const sheetIds = db.prepare('SELECT id, sheet_date FROM sheets').all()
+  const sheetIds = sheetsInRange(resolveRange(req))
     .filter((s) => new Date(`${s.sheet_date}T00:00:00Z`).getUTCDay() === day)
     .map((s) => s.id);
   res.json(machineAverages(sheetIds));
@@ -109,7 +119,7 @@ analyticsRouter.get('/weekday/:day/machines', adminGate, (req, res) => {
 
 // GET /api/analytics/week — average/total performance per calendar week, most recent first
 analyticsRouter.get('/week', adminGate, (req, res) => {
-  const sheets = sheetsWithNetProfit();
+  const sheets = sheetsWithNetProfit(resolveRange(req));
   const byWeek = new Map();
   for (const s of sheets) {
     const key = weekStartISO(s.sheet_date);
@@ -132,7 +142,7 @@ analyticsRouter.get('/week/:weekStart/machines', adminGate, (req, res) => {
 
 // GET /api/analytics/month — average/total performance per calendar month, most recent first
 analyticsRouter.get('/month', adminGate, (req, res) => {
-  const sheets = sheetsWithNetProfit();
+  const sheets = sheetsWithNetProfit(resolveRange(req));
   const byMonth = new Map();
   for (const s of sheets) {
     const key = s.sheet_date.slice(0, 7);
@@ -152,9 +162,9 @@ analyticsRouter.get('/month/:month/machines', adminGate, (req, res) => {
   res.json(machineAverages(sheetIds));
 });
 
-// GET /api/analytics/weekend-split — Weekday (Mon–Thu) vs Weekend (Fri–Sun), across all history
+// GET /api/analytics/weekend-split?from=&to= — Weekday (Mon–Thu) vs Weekend (Fri–Sun) in the range
 analyticsRouter.get('/weekend-split', adminGate, (req, res) => {
-  const sheets = sheetsWithNetProfit();
+  const sheets = sheetsWithNetProfit(resolveRange(req));
   const weekend = sheets.filter((s) => isWeekendDate(s.sheet_date));
   const weekday = sheets.filter((s) => !isWeekendDate(s.sheet_date));
   res.json([
@@ -167,15 +177,15 @@ analyticsRouter.get('/weekend-split', adminGate, (req, res) => {
 analyticsRouter.get('/weekend-split/:key/machines', adminGate, (req, res) => {
   const { key } = req.params;
   if (key !== 'weekday' && key !== 'weekend') return res.status(400).json({ error: 'Unknown period' });
-  const sheetIds = db.prepare('SELECT id, sheet_date FROM sheets').all()
+  const sheetIds = sheetsInRange(resolveRange(req))
     .filter((s) => (key === 'weekend') === isWeekendDate(s.sheet_date))
     .map((s) => s.id);
   res.json(machineAverages(sheetIds));
 });
 
-// GET /api/analytics/overview — quick top-line averages per day / per week / per month, across all history
+// GET /api/analytics/overview?from=&to= — quick top-line averages per day / per week / per month
 analyticsRouter.get('/overview', adminGate, (req, res) => {
-  const sheets = sheetsWithNetProfit();
+  const sheets = sheetsWithNetProfit(resolveRange(req));
   res.json({
     per_day: summarize('day', 'Per Day', sheets),
     per_week: periodAverage(sheets, weekStartISO),
@@ -183,10 +193,10 @@ analyticsRouter.get('/overview', adminGate, (req, res) => {
   });
 });
 
-// GET /api/analytics/day-of-month — average performance for each day-of-month (1-31), across all history.
+// GET /api/analytics/day-of-month?from=&to= — average performance for each day-of-month (1-31).
 // Looks for a "payday effect" — spikes around common pay dates (1st, 15th, end of month).
 analyticsRouter.get('/day-of-month', adminGate, (req, res) => {
-  const sheets = sheetsWithNetProfit();
+  const sheets = sheetsWithNetProfit(resolveRange(req));
   const byDay = new Map();
   for (const s of sheets) {
     const dom = Number(s.sheet_date.slice(8, 10));
@@ -202,7 +212,7 @@ analyticsRouter.get('/day-of-month', adminGate, (req, res) => {
 // GET /api/analytics/day-of-month/:day/machines
 analyticsRouter.get('/day-of-month/:day/machines', adminGate, (req, res) => {
   const dom = Number(req.params.day);
-  const sheetIds = db.prepare('SELECT id, sheet_date FROM sheets').all()
+  const sheetIds = sheetsInRange(resolveRange(req))
     .filter((s) => Number(s.sheet_date.slice(8, 10)) === dom)
     .map((s) => s.id);
   res.json(machineAverages(sheetIds));
@@ -217,7 +227,7 @@ const PAY_PERIODS = [
 // GET /api/analytics/pay-period — same idea as day-of-month, rolled up into thirds of the month
 // (less sparse than exact day-of-month once history is short).
 analyticsRouter.get('/pay-period', adminGate, (req, res) => {
-  const sheets = sheetsWithNetProfit();
+  const sheets = sheetsWithNetProfit(resolveRange(req));
   const result = PAY_PERIODS.map((p) => {
     const dayOf = (s) => Number(s.sheet_date.slice(8, 10));
     return summarize(p.key, p.label, sheets.filter((s) => p.test(dayOf(s))));
@@ -229,13 +239,15 @@ analyticsRouter.get('/pay-period', adminGate, (req, res) => {
 analyticsRouter.get('/pay-period/:period/machines', adminGate, (req, res) => {
   const period = PAY_PERIODS.find((p) => p.key === req.params.period);
   if (!period) return res.status(400).json({ error: 'Unknown pay period' });
-  const sheetIds = db.prepare('SELECT id, sheet_date FROM sheets').all()
+  const sheetIds = sheetsInRange(resolveRange(req))
     .filter((s) => period.test(Number(s.sheet_date.slice(8, 10))))
     .map((s) => s.id);
   res.json(machineAverages(sheetIds));
 });
 
 // GET /api/analytics/leaderboard — cumulative all-time performance per machine, best first.
+// Deliberately ignores the range filter: the question it answers is "which machines are worth
+// keeping", which is about a machine's whole life, not the window currently on screen.
 // Unlike the per-period drill-downs above, this looks at each machine's whole tracked history —
 // answers "which machines are actually worth keeping" rather than "who did well this Monday."
 analyticsRouter.get('/leaderboard', adminGate, (req, res) => {
@@ -258,7 +270,7 @@ analyticsRouter.get('/leaderboard', adminGate, (req, res) => {
 // projection for the next day. Modest by design: one projected point, not a multi-day forecast —
 // a handful of noisy daily numbers doesn't support more than that.
 analyticsRouter.get('/trend', adminGate, (req, res) => {
-  const sheets = sheetsWithNetProfit();
+  const sheets = sheetsWithNetProfit(resolveRange(req));
   const byDate = new Map();
   for (const s of sheets) {
     byDate.set(s.sheet_date, (byDate.get(s.sheet_date) || 0) + s.net_profit);

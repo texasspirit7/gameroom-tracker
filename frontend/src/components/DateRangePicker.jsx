@@ -1,8 +1,14 @@
 import { useEffect, useRef, useState } from 'react';
 import { useDateRange } from '../DateRangeContext.jsx';
 
-export default function DateRangePicker() {
-  const { preset, from, to, label, presets, setPreset, setCustomRange } = useDateRange();
+/**
+ * Bound to the app-wide range by default. Pass `range` (from useLocalDateRange) to drive a
+ * page that keeps its own window instead — the context is still read either way so hook order
+ * stays stable.
+ */
+export default function DateRangePicker({ range }) {
+  const shared = useDateRange();
+  const { preset, from, to, label, presets, setPreset, setCustomRange } = range ?? shared;
   const [open, setOpen] = useState(false);
   const [customFrom, setCustomFrom] = useState(from || '');
   const [customTo, setCustomTo] = useState(to || '');

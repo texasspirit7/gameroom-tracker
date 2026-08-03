@@ -64,21 +64,23 @@ export const api = {
   setProfitSplitNotes: (month, notes) =>
     request(`/api/profit-split/${month}`, { method: 'PATCH', body: JSON.stringify({ notes }) }),
 
-  analyticsByWeekday: () => request('/api/analytics/weekday'),
-  analyticsByWeekdayMachines: (day) => request(`/api/analytics/weekday/${day}/machines`),
-  analyticsByWeek: () => request('/api/analytics/week'),
-  analyticsByWeekMachines: (weekStart) => request(`/api/analytics/week/${weekStart}/machines`),
-  analyticsByMonth: () => request('/api/analytics/month'),
-  analyticsByMonthMachines: (month) => request(`/api/analytics/month/${month}/machines`),
-  analyticsByDayOfMonth: () => request('/api/analytics/day-of-month'),
-  analyticsByDayOfMonthMachines: (day) => request(`/api/analytics/day-of-month/${day}/machines`),
-  analyticsByPayPeriod: () => request('/api/analytics/pay-period'),
-  analyticsByPayPeriodMachines: (period) => request(`/api/analytics/pay-period/${period}/machines`),
-  analyticsWeekendSplit: () => request('/api/analytics/weekend-split'),
-  analyticsWeekendSplitMachines: (key) => request(`/api/analytics/weekend-split/${key}/machines`),
-  analyticsOverview: () => request('/api/analytics/overview'),
+  // Every analytics call takes the page's range as a query string. The leaderboard is the
+  // deliberate exception — it is all-time by design.
+  analyticsByWeekday: (q = '') => request(`/api/analytics/weekday${q}`),
+  analyticsByWeekdayMachines: (day, q = '') => request(`/api/analytics/weekday/${day}/machines${q}`),
+  analyticsByWeek: (q = '') => request(`/api/analytics/week${q}`),
+  analyticsByWeekMachines: (weekStart, q = '') => request(`/api/analytics/week/${weekStart}/machines${q}`),
+  analyticsByMonth: (q = '') => request(`/api/analytics/month${q}`),
+  analyticsByMonthMachines: (month, q = '') => request(`/api/analytics/month/${month}/machines${q}`),
+  analyticsByDayOfMonth: (q = '') => request(`/api/analytics/day-of-month${q}`),
+  analyticsByDayOfMonthMachines: (day, q = '') => request(`/api/analytics/day-of-month/${day}/machines${q}`),
+  analyticsByPayPeriod: (q = '') => request(`/api/analytics/pay-period${q}`),
+  analyticsByPayPeriodMachines: (period, q = '') => request(`/api/analytics/pay-period/${period}/machines${q}`),
+  analyticsWeekendSplit: (q = '') => request(`/api/analytics/weekend-split${q}`),
+  analyticsWeekendSplitMachines: (key, q = '') => request(`/api/analytics/weekend-split/${key}/machines${q}`),
+  analyticsOverview: (q = '') => request(`/api/analytics/overview${q}`),
   analyticsLeaderboard: () => request('/api/analytics/leaderboard'),
-  analyticsTrend: () => request('/api/analytics/trend'),
+  analyticsTrend: (q = '') => request(`/api/analytics/trend${q}`),
 };
 
 export const fmt = (n, opts = {}) =>

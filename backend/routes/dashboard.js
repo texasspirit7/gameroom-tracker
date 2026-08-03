@@ -1,10 +1,10 @@
 import { Router } from 'express';
 import { db } from '../db.js';
+import { resolveRange } from './range.js';
 
 export const dashboardRouter = Router();
 export const machinesRouter = Router();
 
-const DATE_RE = /^\d{4}-\d{2}-\d{2}$/;
 const holdPct = (dIn, dOut) => (dIn > 0 ? Math.round(((dIn - dOut) / dIn) * 100) : null);
 
 /**
@@ -61,24 +61,6 @@ function bucketLabel(key, g) {
   if (g === 'month') return `${MONTHS[Number(key.slice(5, 7)) - 1]} ${key.slice(0, 4)}`;
   if (g === 'week') return `${shortDate(key)}–${shortDate(bucketRange(key, g).to)}`;
   return shortDate(key);
-}
-
-/** Parses & validates from/to query params. Returns { from, to, allTime, label }. */
-function resolveRange(req) {
-  const { from, to, label } = req.query;
-  if (from && to && DATE_RE.test(from) && DATE_RE.test(to) && from <= to) {
-    return { from, to, allTime: false, label: label ? String(label) : `${from} to ${to}` };
-  }
-  const sheetBounds = db.prepare('SELECT MIN(sheet_date) AS min, MAX(sheet_date) AS max FROM sheets').get();
-  const expenseBounds = db.prepare('SELECT MIN(expense_date) AS min, MAX(expense_date) AS max FROM other_expenses').get();
-  const mins = [sheetBounds.min, expenseBounds.min].filter(Boolean);
-  const maxs = [sheetBounds.max, expenseBounds.max].filter(Boolean);
-  return {
-    from: mins.length ? mins.sort()[0] : '0001-01-01',
-    to: maxs.length ? maxs.sort().at(-1) : '9999-12-31',
-    allTime: true,
-    label: label ? String(label) : 'All Time',
-  };
 }
 
 function aggregate(from, to) {
@@ -170,12 +152,12 @@ function alertsForRange(from, to, label) {
   return alerts;
 }
 
-// Flags a gap in daily uploads — independent of whatever range is being viewed, since
-// it's about real-world business continuity, not the historical window on screen.
 /** How many sheets/machines the dashboard's summary strips carry. */
 const RECENT_SHEET_COUNT = 3;
 const TOP_MACHINE_COUNT = 5;
 
+// Flags a gap in daily uploads — independent of whatever range is being viewed, since
+// it's about real-world business continuity, not the historical window on screen.
 const MISSING_DAY_THRESHOLD = 2;
 export function missingDayAlert(latestDate) {
   if (!latestDate) return null;
