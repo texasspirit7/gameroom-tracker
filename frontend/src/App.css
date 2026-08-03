@@ -477,7 +477,14 @@ input[type="date"] { color-scheme: dark; }
 .muted { color: var(--muted); }
 .grid-2 { display: grid; grid-template-columns: 1fr 1fr; gap: 22px; }
 @media (max-width: 980px) { .grid-2 { grid-template-columns: 1fr; } }
-.toolbar { display: flex; gap: 10px; align-items: center; margin-bottom: 16px; flex-wrap: wrap; }
+/* Lifted above the panels because `.content > *` puts every direct child — each panel
+   included — in its own stacking context at z-index 1. A toolbar holding a dropdown would
+   otherwise have it trapped at that level and painted over by any panel further down the
+   page. Stays below the mobile drawer and its backdrop (55/60). */
+.toolbar {
+  display: flex; gap: 10px; align-items: center; margin-bottom: 16px; flex-wrap: wrap;
+  position: relative; z-index: 30;
+}
 .spacer { flex: 1; }
 
 /* ---------- Date range control ---------- */
