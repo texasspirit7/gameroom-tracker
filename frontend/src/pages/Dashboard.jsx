@@ -375,9 +375,14 @@ function useCountUp(target, duration = 700) {
 
   useEffect(() => {
     const to = Number(target) || 0;
-    if (window.matchMedia?.('(prefers-reduced-motion: reduce)').matches) {
-      fromRef.current = to;
-      setShown(to);
+    const snapToTarget = () => { fromRef.current = to; setShown(to); };
+
+    // Browsers don't deliver animation frames to a hidden tab, so an animated count-up would
+    // sit frozen on its starting value — which on a money dashboard reads as "$0 earned",
+    // not "still loading". Skip the animation and show the real figure.
+    if (document.visibilityState === 'hidden'
+        || window.matchMedia?.('(prefers-reduced-motion: reduce)').matches) {
+      snapToTarget();
       return undefined;
     }
     const from = fromRef.current;
@@ -396,7 +401,10 @@ function useCountUp(target, duration = 700) {
       }
     };
     raf = requestAnimationFrame(tick);
-    return () => cancelAnimationFrame(raf);
+    // Backstop for frames drying up mid-run — the tab being hidden partway, or heavy
+    // throttling. Landing on the true number matters more than the animation finishing.
+    const backstop = setTimeout(snapToTarget, duration + 250);
+    return () => { cancelAnimationFrame(raf); clearTimeout(backstop); };
   }, [target, duration]);
 
   return shown;

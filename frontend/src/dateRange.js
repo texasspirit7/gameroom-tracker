@@ -26,6 +26,12 @@ const startOfMonth = (iso) => {
   return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-01`;
 };
 
+/** Last calendar day of the month — day 0 of the next month rolls back to it, leap years included. */
+const endOfMonth = (iso) => {
+  const d = parseISO(iso);
+  return toISO(new Date(d.getFullYear(), d.getMonth() + 1, 0));
+};
+
 const startOfYear = (iso) => `${parseISO(iso).getFullYear()}-01-01`;
 
 const formatShort = (iso) => {
@@ -61,7 +67,9 @@ export function buildPresets() {
     { key: 'last7', label: 'Last 7 Days', from: addDays(today, -6), to: today },
     { key: 'wtd', label: 'This Week', from: wtdFrom, to: today },
     { key: 'lastWeek', label: 'Last Week', from: lastWeekFrom, to: lastWeekTo },
-    { key: 'mtd', label: 'This Month', from: mtdFrom, to: today },
+    // The whole calendar month, not month-to-date: the end date runs to the last of the month
+    // even when that's still in the future, so the window doesn't creep forward day by day.
+    { key: 'mtd', label: 'This Month', from: mtdFrom, to: endOfMonth(today) },
     { key: 'lastMonth', label: 'Last Month', from: lastMonthFrom, to: lastMonthTo },
     { key: 'last30', label: 'Last 30 Days', from: addDays(today, -29), to: today },
     { key: 'ytd', label: 'Year to Date', from: ytdFrom, to: today },

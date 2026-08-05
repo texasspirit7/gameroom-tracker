@@ -2,42 +2,38 @@ import { createContext, useContext, useMemo, useState } from 'react';
 import { buildPresets, formatRangeLabel } from './dateRange.js';
 
 const DateRangeContext = createContext(null);
-const STORAGE_KEY = 'grt_date_range';
 
-function loadSaved() {
-  try {
-    const raw = localStorage.getItem(STORAGE_KEY);
-    return raw ? JSON.parse(raw) : null;
-  } catch {
-    return null;
-  }
+/**
+ * Every page opens on the current month.
+ *
+ * The selection deliberately isn't persisted: a change lasts for the session and is dropped on
+ * refresh or a fresh sign-in, so you always start from the same known window rather than
+ * inheriting a range you set days ago and forgot about.
+ */
+export const DEFAULT_RANGE_KEY = 'mtd';
+
+/** Left over from when the selection was persisted — cleared so it can't resurface later. */
+const LEGACY_STORAGE_KEY = 'grt_date_range';
+try { localStorage.removeItem(LEGACY_STORAGE_KEY); } catch { /* private mode / storage disabled */ }
+
+function initialRange(presets, key) {
+  const p = presets.find((x) => x.key === key) || presets.find((x) => x.key === 'allTime');
+  return { preset: p.key, from: p.from, to: p.to, label: p.label };
 }
 
 export function DateRangeProvider({ children }) {
   const presets = useMemo(() => buildPresets(), []);
-
-  const [state, setState] = useState(() => {
-    const saved = loadSaved();
-    if (saved?.preset === 'custom' && saved.from && saved.to) {
-      return { preset: 'custom', from: saved.from, to: saved.to, label: formatRangeLabel(saved.from, saved.to) };
-    }
-    const found = presets.find((p) => p.key === saved?.preset) || presets.find((p) => p.key === 'allTime');
-    return { preset: found.key, from: found.from, to: found.to, label: found.label };
-  });
+  const [state, setState] = useState(() => initialRange(presets, DEFAULT_RANGE_KEY));
 
   const setPreset = (key) => {
     const p = presets.find((x) => x.key === key);
     if (!p) return;
-    const next = { preset: p.key, from: p.from, to: p.to, label: p.label };
-    setState(next);
-    localStorage.setItem(STORAGE_KEY, JSON.stringify(next));
+    setState({ preset: p.key, from: p.from, to: p.to, label: p.label });
   };
 
   const setCustomRange = (from, to) => {
     if (!from || !to || from > to) return;
-    const next = { preset: 'custom', from, to, label: formatRangeLabel(from, to) };
-    setState(next);
-    localStorage.setItem(STORAGE_KEY, JSON.stringify(next));
+    setState({ preset: 'custom', from, to, label: formatRangeLabel(from, to) });
   };
 
   return (
@@ -55,18 +51,14 @@ export function useDateRange() {
 
 /**
  * A range that belongs to one page rather than the whole app: same shape as the shared
- * context, but its own state, not persisted and not inherited.
+ * context, but its own state and not inherited from it.
  *
- * Analytics uses this so it always opens on All Time. Sharing the global range would mean
- * picking "This Month" on the Dashboard silently narrowed the trends and seasonality
- * breakdowns too, which are long-horizon views by nature.
+ * Analytics uses this so changing the range there doesn't follow you to the Dashboard, and
+ * vice versa. Like the shared range it starts on the current month and resets on refresh.
  */
-export function useLocalDateRange(defaultKey = 'allTime') {
+export function useLocalDateRange(defaultKey = DEFAULT_RANGE_KEY) {
   const presets = useMemo(() => buildPresets(), []);
-  const [state, setState] = useState(() => {
-    const p = presets.find((x) => x.key === defaultKey) || presets.find((x) => x.key === 'allTime');
-    return { preset: p.key, from: p.from, to: p.to, label: p.label };
-  });
+  const [state, setState] = useState(() => initialRange(presets, defaultKey));
 
   const setPreset = (key) => {
     const p = presets.find((x) => x.key === key);

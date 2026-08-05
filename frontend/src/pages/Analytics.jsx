@@ -277,9 +277,9 @@ export default function Analytics() {
   const [metricKey, setMetricKey] = useState('net_profit');
   const metric = METRICS.find((m) => m.key === metricKey);
 
-  // Its own range rather than the app-wide one, so this page always opens on All Time —
-  // narrowing the Dashboard shouldn't quietly narrow the trend and seasonality views too.
-  const range = useLocalDateRange('allTime');
+  // Its own range rather than the app-wide one, so changing it here doesn't follow you to the
+  // Dashboard. Opens on the current month like every other page.
+  const range = useLocalDateRange();
   const query = range.preset === 'allTime'
     ? ''
     : `?from=${range.from}&to=${range.to}&label=${encodeURIComponent(range.label)}`;
