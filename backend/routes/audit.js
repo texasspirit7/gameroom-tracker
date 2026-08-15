@@ -12,3 +12,17 @@ auditRouter.get('/', (req, res) => {
   `).all(limit);
   res.json(rows);
 });
+
+/**
+ * Append a line to the audit trail.
+ *
+ * sheet_id / sheet_date are denormalized rather than foreign keys so the trail outlives the
+ * row it describes. Both are nullable: entries that aren't about a sheet at all — a profit
+ * receipt, say — leave them empty and carry their context in `detail`.
+ */
+export function logAudit(req, { action, sheetId, sheetDate, detail }) {
+  db.prepare(`
+    INSERT INTO audit_log (action, sheet_id, sheet_date, actor_email, actor_name, detail)
+    VALUES (?, ?, ?, ?, ?, ?)
+  `).run(action, sheetId ?? null, sheetDate ?? null, req.user?.email ?? null, req.user?.name ?? null, detail ?? null);
+}

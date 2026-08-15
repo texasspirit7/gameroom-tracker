@@ -3,6 +3,7 @@ import multer from 'multer';
 import fs from 'node:fs';
 import path from 'node:path';
 import { db } from '../db.js';
+import { logAudit } from './audit.js';
 import { config } from '../config.js';
 import { extractFromXlsx } from '../extract/xlsxExtract.js';
 import { extractFromImage, mediaTypeForExt, normalizeMachines } from '../extract/claudeExtract.js';
@@ -73,15 +74,6 @@ export function resolveSheetDate({ providedDate, extractedDate, lastSheetDate, t
   }
 
   return { date: guess(), source: 'guessed' };
-}
-
-/** Records who did what to a sheet, and when — sheetDate is passed explicitly since a
- * delete removes the row itself, and req.user is absent when auth is disabled. */
-function logAudit(req, { action, sheetId, sheetDate, detail }) {
-  db.prepare(`
-    INSERT INTO audit_log (action, sheet_id, sheet_date, actor_email, actor_name, detail)
-    VALUES (?, ?, ?, ?, ?, ?)
-  `).run(action, sheetId ?? null, sheetDate ?? null, req.user?.email ?? null, req.user?.name ?? null, detail ?? null);
 }
 
 function saveUploadedFile(file, sheetDate) {

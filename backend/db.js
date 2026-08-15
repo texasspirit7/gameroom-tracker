@@ -116,6 +116,23 @@ db.exec(`
     paid_by TEXT
   );
 
+  -- Money actually received against what the 40% side is owed. Deliberately separate from
+  -- the split calculation: the split is an *entitlement* derived from profit earned, this is
+  -- the *settlement* of it. Recording a receipt must never move a month's amount_40.
+  --
+  -- Receipts belong to the account, not to a month. Payments arrive in lump sums that rarely
+  -- line up with month boundaries, so they pay down one running balance and month-by-month
+  -- coverage is derived from that oldest-first.
+  CREATE TABLE IF NOT EXISTS profit_receipts (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    received_on TEXT NOT NULL,                      -- YYYY-MM-DD
+    amount REAL NOT NULL DEFAULT 0,                 -- cash received
+    expense_credit REAL NOT NULL DEFAULT 0,         -- value received as expenses instead of cash
+    note TEXT,
+    created_by TEXT,
+    created_at TEXT NOT NULL DEFAULT (datetime('now'))
+  );
+
   -- Who did what to a sheet, and when — sheet_id/sheet_date are kept even after a
   -- delete (denormalized, not a foreign key) so the trail survives the sheet itself.
   CREATE TABLE IF NOT EXISTS audit_log (
@@ -144,6 +161,13 @@ db.exec("UPDATE expenses SET category = 'family dollar' WHERE category = 'food'"
 // real category — Claude vision extraction sometimes used it verbatim,
 // producing a duplicate-looking "name" entry alongside the correct "pay" one.
 db.exec("UPDATE expenses SET category = 'pay' WHERE category = 'name'");
+
+// One-time migration: receipts moved from per-month attribution to a single running account,
+// so the month column is no longer written or read.
+if (db.prepare('PRAGMA table_info(profit_receipts)').all().some((c) => c.name === 'month')) {
+  db.exec('DROP INDEX IF EXISTS idx_profit_receipts_month');
+  db.exec('ALTER TABLE profit_receipts DROP COLUMN month');
+}
 
 // One-time migration: free-text notes per month on the Profit Split page.
 if (!db.prepare("PRAGMA table_info(profit_splits)").all().some((c) => c.name === 'notes')) {

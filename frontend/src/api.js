@@ -64,6 +64,12 @@ export const api = {
   setProfitSplitNotes: (month, notes) =>
     request(`/api/profit-split/${month}`, { method: 'PATCH', body: JSON.stringify({ notes }) }),
 
+  // Receipts — money actually received against the running balance. Separate from the split
+  // itself: recording one settles a balance, it never changes an entitlement.
+  profitReceipts: () => request('/api/profit-split/receipts'),
+  addProfitReceipt: (body) => request('/api/profit-split/receipts', { method: 'POST', body: JSON.stringify(body) }),
+  deleteProfitReceipt: (id) => request(`/api/profit-split/receipts/${id}`, { method: 'DELETE' }),
+
   // Every analytics call takes the page's range as a query string. The leaderboard is the
   // deliberate exception — it is all-time by design.
   analyticsByWeekday: (q = '') => request(`/api/analytics/weekday${q}`),

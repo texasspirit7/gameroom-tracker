@@ -37,7 +37,7 @@ before(async () => {
   await upload(ctx.baseUrl, cookie, '2026-01-15', 12000, 0);
   await upload(ctx.baseUrl, cookie, '2026-02-15', 20000, 0);
   await upload(ctx.baseUrl, cookie, '2026-03-15', 10000, 0);
-  rows = await (await fetch(`${ctx.baseUrl}/api/profit-split`, { headers: { Cookie: cookie } })).json();
+  ({ rows } = await (await fetch(`${ctx.baseUrl}/api/profit-split`, { headers: { Cookie: cookie } })).json());
 });
 after(async () => { await ctx.stop(); });
 

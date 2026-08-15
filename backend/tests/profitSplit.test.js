@@ -46,7 +46,7 @@ describe('/api/profit-split — admin-only page', () => {
   test('while the recoup is outstanding the whole month goes to the 40% side', async () => {
     const res = await fetch(`${ctx.baseUrl}/api/profit-split`, { headers: { Cookie: adminCookie } });
     assert.equal(res.status, 200);
-    const rows = await res.json();
+    const { rows } = await res.json();
     const row = rows.find((r) => r.month === '2026-04');
     assert.ok(row, 'expected a row for 2026-04');
     assert.equal(row.net_profit, 50); // (100+0)-(50+0)
@@ -70,7 +70,7 @@ describe('/api/profit-split — admin-only page', () => {
     await fetch(`${ctx.baseUrl}/api/profit-split/2026-04`, {
       method: 'PATCH', headers: { Cookie: adminCookie, 'Content-Type': 'application/json' }, body: JSON.stringify({ paid: true }),
     });
-    const rows = await (await fetch(`${ctx.baseUrl}/api/profit-split`, { headers: { Cookie: adminCookie } })).json();
+    const { rows } = await (await fetch(`${ctx.baseUrl}/api/profit-split`, { headers: { Cookie: adminCookie } })).json();
     const row = rows.find((r) => r.month === '2026-04');
     assert.equal(row.paid, true);
     assert.ok(row.paid_at);
@@ -80,7 +80,7 @@ describe('/api/profit-split — admin-only page', () => {
 
 describe('/api/profit-split — per-month comments (regression: notes must not disturb paid state)', () => {
   test('a new month has an empty notes string by default', async () => {
-    const rows = await (await fetch(`${ctx.baseUrl}/api/profit-split`, { headers: { Cookie: adminCookie } })).json();
+    const { rows } = await (await fetch(`${ctx.baseUrl}/api/profit-split`, { headers: { Cookie: adminCookie } })).json();
     const row = rows.find((r) => r.month === '2026-05');
     assert.equal(row.notes, '');
   });
@@ -91,7 +91,7 @@ describe('/api/profit-split — per-month comments (regression: notes must not d
       body: JSON.stringify({ notes: 'Waiting on owner to confirm split percentage' }),
     });
     assert.equal(res.status, 200);
-    const rows = await (await fetch(`${ctx.baseUrl}/api/profit-split`, { headers: { Cookie: adminCookie } })).json();
+    const { rows } = await (await fetch(`${ctx.baseUrl}/api/profit-split`, { headers: { Cookie: adminCookie } })).json();
     const row = rows.find((r) => r.month === '2026-05');
     assert.equal(row.notes, 'Waiting on owner to confirm split percentage');
     assert.equal(row.paid, false, 'saving a comment must not mark the month paid');
@@ -101,7 +101,7 @@ describe('/api/profit-split — per-month comments (regression: notes must not d
     await fetch(`${ctx.baseUrl}/api/profit-split/2026-05`, {
       method: 'PATCH', headers: { Cookie: adminCookie, 'Content-Type': 'application/json' }, body: JSON.stringify({ paid: true }),
     });
-    const rows = await (await fetch(`${ctx.baseUrl}/api/profit-split`, { headers: { Cookie: adminCookie } })).json();
+    const { rows } = await (await fetch(`${ctx.baseUrl}/api/profit-split`, { headers: { Cookie: adminCookie } })).json();
     const row = rows.find((r) => r.month === '2026-05');
     assert.equal(row.paid, true);
     assert.equal(row.notes, 'Waiting on owner to confirm split percentage');

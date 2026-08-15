@@ -108,7 +108,7 @@ describe('/api/export — CSV downloads', () => {
   });
 
   test('profit-split.csv reflects the same net profit/split math as the JSON endpoint', async () => {
-    const jsonRows = await (await fetch(`${ctx.baseUrl}/api/profit-split`, { headers: { Cookie: adminCookie } })).json();
+    const { rows: jsonRows } = await (await fetch(`${ctx.baseUrl}/api/profit-split`, { headers: { Cookie: adminCookie } })).json();
     const decRow = jsonRows.find((r) => r.month === '2026-12');
     assert.ok(decRow);
 
