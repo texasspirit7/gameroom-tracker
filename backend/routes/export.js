@@ -89,17 +89,14 @@ exportRouter.get('/expenses.csv', (req, res) => {
 exportRouter.get('/profit-split.csv', adminGate, (req, res) => {
   const rows = buildProfitSplitRows();
   const csv = toCsv([
-    { key: 'month', label: 'Month' },
-    { key: 'split_label', label: 'Split' },
+    { key: 'period_start', label: 'Week Starting' },
+    { key: 'period_end', label: 'Week Ending' },
     { key: 'net_profit', label: 'Net Profit' },
-    { key: 'recoup_amount', label: 'To Recoup' },
-    { key: 'split_base', label: 'Split Base' },
-    { key: 'recovered_to_date', label: 'Recovered To Date' },
     { key: 'amount_40', label: '40% Amount' },
     { key: 'amount_60', label: '60% Amount' },
-    { key: 'paid', label: 'Paid' },
-    { key: 'paid_at', label: 'Paid At' },
-    { key: 'paid_by', label: 'Paid By' },
+    { key: 'owed_running', label: 'Running Total Owed' },
+    { key: 'applied', label: 'Received Against' },
+    { key: 'coverage', label: 'Coverage' },
     { key: 'notes', label: 'Notes' },
   ], rows);
   sendCsv(res, 'profit-split.csv', csv);

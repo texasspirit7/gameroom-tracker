@@ -7,7 +7,7 @@ import { config } from './config.js';
 import { sheetsRouter } from './routes/sheets.js';
 import { dashboardRouter, machinesRouter } from './routes/dashboard.js';
 import { expensesRouter } from './routes/expenses.js';
-import { profitSplitRouter } from './routes/profitSplit.js';
+import { profitSplitRouter, seedCloseOutReceipt } from './routes/profitSplit.js';
 import { analyticsRouter } from './routes/analytics.js';
 import { authRouter, adminRouter } from './routes/auth.js';
 import { auditRouter } from './routes/audit.js';
@@ -18,6 +18,10 @@ import { requireAuth, requireApproved } from './auth.js';
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 
 /** Builds the configured Express app (no listening) — shared by server.js and tests. */
+// The close-out payment is seeded once at boot so the settled history has a real receipt
+// behind it rather than a figure hard-coded into the page.
+seedCloseOutReceipt();
+
 export function createApp() {
   const app = express();
 

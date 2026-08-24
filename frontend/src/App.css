@@ -725,25 +725,9 @@ input[type="date"] { color-scheme: dark; }
 .account-fig { font-family: var(--mono); font-size: 26px; font-weight: 600; color: var(--ink); }
 .account-card .muted { font-size: 12px; }
 
-/* Earned and received stacked on one track: earned sits behind (it decides when the 40/60
-   starts), received in front (what has actually landed). The gap between them is the point. */
-.recoup-bar-dual { position: relative; height: 14px; border-radius: 7px; }
-.recoup-bar-dual i { position: absolute; inset: 0 auto 0 0; height: 100%; }
-.recoup-bar-dual i.earned { background: rgba(201,162,39,0.32); }
-.recoup-bar-dual i.received { background: linear-gradient(90deg, var(--accent-2), var(--accent)); }
-
-.stacked-h { margin-top: 22px; }
-
-.recoup-legend {
-  display: flex; gap: 18px; align-items: center; flex-wrap: wrap;
-  margin-top: 10px; font-size: 13px;
-}
-.recoup-legend .swatch {
-  display: inline-block; width: 10px; height: 10px; border-radius: 3px;
-  margin-right: 6px; vertical-align: -1px;
-}
-.recoup-legend .swatch.earned { background: rgba(201,162,39,0.5); }
-.recoup-legend .swatch.received { background: var(--accent); }
+/* The settled history reads as a footnote, not as another week to act on. */
+.split-table tr.closed-period > td { color: var(--muted); background: var(--sunk); }
+.split-table tr.closed-period td:first-child { color: var(--ink-2); }
 .recoup-note { margin: 10px 0 0; font-size: 13px; }
 
 .split-table th, .split-table td { white-space: nowrap; }

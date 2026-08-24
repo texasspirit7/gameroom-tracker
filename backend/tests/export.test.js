@@ -107,19 +107,22 @@ describe('/api/export — CSV downloads', () => {
     assert.equal(splitRes.status, 403);
   });
 
-  test('profit-split.csv reflects the same net profit/split math as the JSON endpoint', async () => {
+  test('profit-split.csv reflects the same weekly split as the JSON endpoint', async () => {
     const { rows: jsonRows } = await (await fetch(`${ctx.baseUrl}/api/profit-split`, { headers: { Cookie: adminCookie } })).json();
-    const decRow = jsonRows.find((r) => r.month === '2026-12');
-    assert.ok(decRow);
+    const week = jsonRows.find((r) => !r.closed);
+    assert.ok(week, 'expected at least one weekly row');
 
     const csvRes = await fetch(`${ctx.baseUrl}/api/export/profit-split.csv`, { headers: { Cookie: adminCookie } });
     const { header, rows } = parseCsv(await csvRes.text());
-    assert.deepEqual(header, ['Month', 'Split', 'Net Profit', 'To Recoup', 'Split Base', 'Recovered To Date', '40% Amount', '60% Amount', 'Paid', 'Paid At', 'Paid By', 'Notes']);
-    const csvRow = rows.find((r) => r[0] === '2026-12');
-    assert.ok(csvRow);
-    assert.equal(Number(csvRow[2]), decRow.net_profit);
-    assert.equal(Number(csvRow[3]), decRow.recoup_amount);
-    assert.equal(Number(csvRow[6]), decRow.amount_40);
+    assert.deepEqual(header, ['Week Starting', 'Week Ending', 'Net Profit', '40% Amount', '60% Amount',
+      'Running Total Owed', 'Received Against', 'Coverage', 'Notes']);
+
+    const csvRow = rows.find((r) => r[0] === week.period_start);
+    assert.ok(csvRow, `expected a CSV row for the week starting ${week.period_start}`);
+    assert.equal(csvRow[1], week.period_end);
+    assert.equal(Number(csvRow[2]), week.net_profit);
+    assert.equal(Number(csvRow[3]), week.amount_40);
+    assert.equal(Number(csvRow[4]), week.amount_60);
   });
 
   test('no from/to params exports everything on record rather than erroring', async () => {

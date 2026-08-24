@@ -59,10 +59,8 @@ export const api = {
   setUserRole: (id, role) => request(`/api/admin/users/${id}/role`, { method: 'POST', body: JSON.stringify({ role }) }),
 
   profitSplit: () => request('/api/profit-split'),
-  setProfitSplitPaid: (month, paid) =>
-    request(`/api/profit-split/${month}`, { method: 'PATCH', body: JSON.stringify({ paid }) }),
-  setProfitSplitNotes: (month, notes) =>
-    request(`/api/profit-split/${month}`, { method: 'PATCH', body: JSON.stringify({ notes }) }),
+  setProfitSplitNotes: (period, notes) =>
+    request(`/api/profit-split/${period}`, { method: 'PATCH', body: JSON.stringify({ notes }) }),
 
   // Receipts — money actually received against the running balance. Separate from the split
   // itself: recording one settles a balance, it never changes an entitlement.

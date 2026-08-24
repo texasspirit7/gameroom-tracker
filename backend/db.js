@@ -108,12 +108,12 @@ db.exec(`
     created_at TEXT NOT NULL DEFAULT (datetime('now'))
   );
 
-  -- Tracks whether the monthly 40/60 net-profit split has been paid out
+  -- Free-text comments against a split period. A period is either 'closed' (the settled
+  -- history before the close-out) or a week's Monday as YYYY-MM-DD. Whether a period has
+  -- been paid is derived from profit_receipts, not stored here.
   CREATE TABLE IF NOT EXISTS profit_splits (
-    month TEXT PRIMARY KEY,                         -- YYYY-MM
-    paid INTEGER NOT NULL DEFAULT 0,
-    paid_at TEXT,
-    paid_by TEXT
+    period TEXT PRIMARY KEY,
+    notes TEXT
   );
 
   -- Money actually received against what the 40% side is owed. Deliberately separate from
@@ -169,7 +169,23 @@ if (db.prepare('PRAGMA table_info(profit_receipts)').all().some((c) => c.name ==
   db.exec('ALTER TABLE profit_receipts DROP COLUMN month');
 }
 
-// One-time migration: free-text notes per month on the Profit Split page.
-if (!db.prepare("PRAGMA table_info(profit_splits)").all().some((c) => c.name === 'notes')) {
+// One-time migration: free-text notes per period on the Profit Split page.
+if (!db.prepare('PRAGMA table_info(profit_splits)').all().some((c) => c.name === 'notes')) {
   db.exec('ALTER TABLE profit_splits ADD COLUMN notes TEXT');
+}
+
+// One-time migration: the 40/60 split moved from calendar months to Monday–Sunday weeks, so
+// the key is now a period (a week's Monday, or 'closed') rather than a month.
+{
+  const cols = db.prepare('PRAGMA table_info(profit_splits)').all().map((c) => c.name);
+  if (cols.includes('month')) {
+    db.exec('ALTER TABLE profit_splits RENAME COLUMN month TO period');
+    // Month-keyed rows all fall inside the closed period now, so their comments no longer
+    // belong to any row the page can show. Dropped rather than left as unreachable data.
+    db.exec("DELETE FROM profit_splits WHERE period LIKE '____-__'");
+  }
+  // The paid flag is gone: settlement is derived from what has actually been received.
+  for (const dead of ['paid', 'paid_at', 'paid_by']) {
+    if (cols.includes(dead)) db.exec(`ALTER TABLE profit_splits DROP COLUMN ${dead}`);
+  }
 }

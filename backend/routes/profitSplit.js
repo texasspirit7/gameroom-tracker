@@ -5,21 +5,33 @@ import { logAudit } from './audit.js';
 
 export const profitSplitRouter = Router();
 
-const MONTH_RE = /^\d{4}-\d{2}$/;
-const SPLIT_A = 0.4; // 40% — the recouping side
+const SPLIT_A = 0.4; // 40% — our side
 const SPLIT_B = 0.6; // 60%
 
 /**
- * Money the 40% side takes in full before the split starts. Every month's net profit goes
- * entirely to them — however many months that takes — until this much has been received;
- * only what's left over that month, and every month after, is split 40/60.
+ * The line drawn under the old arrangement.
+ *
+ * Everything up to and including this Sunday was settled in one payment and is not
+ * recomputed from sheets — it shows as a single closed row whose balance is zero by
+ * construction. The $30,000 recoup ended with it: from the following Monday every week
+ * splits 40/60 outright, with no 100% phase.
  */
-const RECOUP_TARGET = 30000;
+export const CLOSE_OUT_DATE = '2026-08-23';   // a Sunday
+export const CLOSE_OUT_RECEIVED = 7400;
+/** The Monday after the close-out — the first day of the first weekly period. */
+export const FIRST_WEEK_START = '2026-08-24';
+export const CLOSED_PERIOD_KEY = 'closed';
+
+/** Marks the seeded close-out receipt so the one-time insert stays idempotent. */
+const CLOSE_OUT_ACTOR = 'system:closeout';
+
+/** A period key is either the closed row or a week's Monday. */
+const PERIOD_RE = /^(closed|\d{4}-\d{2}-\d{2})$/;
 
 /**
- * Sub-cent slack when deciding whether a month is settled. Owed amounts are floats
- * (40% of a split base), so a month paid to the exact dollar can land a fraction of a
- * cent short and would otherwise read "Partial" forever.
+ * Sub-cent slack when deciding whether a period is settled. Owed amounts are floats (40% of
+ * a week's net), so a period paid to the exact dollar can land a fraction of a cent short and
+ * would otherwise read "Partial" forever.
  */
 const SETTLED_EPSILON = 0.005;
 
@@ -28,11 +40,36 @@ const round2 = (n) => Math.round(n * 100) / 100;
 /** Cash plus expense credit — both settle the debt, so they're summed everywhere. */
 const receiptTotal = (r) => (r.amount || 0) + (r.expense_credit || 0);
 
+const todayISO = () => new Date().toISOString().slice(0, 10);
+
+function addDaysISO(iso, delta) {
+  const [y, m, d] = iso.split('-').map(Number);
+  const dt = new Date(Date.UTC(y, m - 1, d + delta));
+  return dt.toISOString().slice(0, 10);
+}
+
+/** The Monday of the week containing `iso`, for Monday–Sunday weeks. */
+export function mondayOf(iso) {
+  const [y, m, d] = iso.split('-').map(Number);
+  const dt = new Date(Date.UTC(y, m - 1, d));
+  // getUTCDay: 0 = Sunday. Sunday belongs to the week that began six days earlier.
+  const back = (dt.getUTCDay() + 6) % 7;
+  return addDaysISO(iso, -back);
+}
+
+/** Every week Monday from `startMonday` through the week containing `throughDate`. */
+function weeksFrom(startMonday, throughDate) {
+  const last = mondayOf(throughDate);
+  const out = [];
+  for (let wk = startMonday; wk <= last; wk = addDaysISO(wk, 7)) out.push(wk);
+  return out;
+}
+
 /**
- * How far a payment pool covers one month's entitlement.
+ * How far a payment pool covers one period's entitlement.
  *
- * 'none' is kept distinct from 'covered' so a month that earned nothing doesn't display as
- * an achievement — it had nothing to cover in the first place.
+ * 'none' is kept distinct from 'covered' so a week that earned nothing doesn't display as an
+ * achievement — it had nothing to cover in the first place.
  */
 export function coverageOf(owed, applied) {
   if (owed <= SETTLED_EPSILON) return 'none';
@@ -41,150 +78,152 @@ export function coverageOf(owed, applied) {
   return 'partial';
 }
 
-/** Every receipt, newest first. Receipts belong to the account, not to any one month. */
+/** Every receipt, newest first. Receipts belong to the account, not to any one period. */
 export function listReceipts() {
   return db.prepare('SELECT * FROM profit_receipts ORDER BY received_on DESC, id DESC').all();
 }
 
-function monthsBetween(start, end) {
-  const months = [];
-  let [y, m] = start.split('-').map(Number);
-  const [endY, endM] = end.split('-').map(Number);
-  while (y < endY || (y === endY && m <= endM)) {
-    months.push(`${y}-${String(m).padStart(2, '0')}`);
-    m += 1;
-    if (m > 12) { m = 1; y += 1; }
-  }
-  return months;
+/**
+ * One-time seed of the close-out payment, so the closed period has a real receipt behind it
+ * rather than a number conjured in the UI. Idempotent via created_by.
+ */
+export function seedCloseOutReceipt() {
+  const existing = db.prepare('SELECT id FROM profit_receipts WHERE created_by = ?').get(CLOSE_OUT_ACTOR);
+  if (existing) return existing.id;
+  const info = db.prepare(`
+    INSERT INTO profit_receipts (received_on, amount, expense_credit, note, created_by)
+    VALUES (?, ?, 0, ?, ?)
+  `).run(CLOSE_OUT_DATE, CLOSE_OUT_RECEIVED,
+    `Close-out — everything through ${CLOSE_OUT_DATE} settled`, CLOSE_OUT_ACTOR);
+  return info.lastInsertRowid;
 }
 
-/** One row per month since tracking began, most recent first — shared by the
- * GET route and the CSV export so both compute net profit/split the same way. */
+/**
+ * One row per Monday–Sunday week since the close-out, most recent first, preceded by the
+ * single closed row covering everything before it.
+ *
+ * Shared by the GET route and the CSV export so both compute the split the same way.
+ */
 export function buildProfitSplitRows() {
-  const meterByMonth = db.prepare(`
-    SELECT strftime('%Y-%m', sheet_date) AS month, COALESCE(SUM(meter_profit), 0) AS mp
-    FROM sheets GROUP BY month
-  `).all();
-  const sheetExpByMonth = db.prepare(`
-    SELECT strftime('%Y-%m', s.sheet_date) AS month, COALESCE(SUM(e.amount), 0) AS exp
-    FROM expenses e JOIN sheets s ON s.id = e.sheet_id GROUP BY month
-  `).all();
-  const otherExpByMonth = db.prepare(`
-    SELECT strftime('%Y-%m', expense_date) AS month, COALESCE(SUM(amount), 0) AS exp
-    FROM other_expenses GROUP BY month
-  `).all();
-  const paidRows = db.prepare('SELECT month, paid, paid_at, paid_by, notes FROM profit_splits').all();
-  const receiptRows = db.prepare('SELECT amount, expense_credit FROM profit_receipts').all();
-  const receivedTotal = receiptRows.reduce((sum, r) => sum + receiptTotal(r), 0);
+  // Only sheets from the first weekly period onward are recomputed; earlier ones are inside
+  // the closed period and settled.
+  const WEEK_OF = "date(%COL%, 'weekday 0', '-6 days')";
+  const meterByWeek = db.prepare(`
+    SELECT ${WEEK_OF.replace('%COL%', 'sheet_date')} AS wk, COALESCE(SUM(meter_profit), 0) AS mp
+    FROM sheets WHERE sheet_date >= ? GROUP BY wk
+  `).all(FIRST_WEEK_START);
+  const sheetExpByWeek = db.prepare(`
+    SELECT ${WEEK_OF.replace('%COL%', 's.sheet_date')} AS wk, COALESCE(SUM(e.amount), 0) AS exp
+    FROM expenses e JOIN sheets s ON s.id = e.sheet_id WHERE s.sheet_date >= ? GROUP BY wk
+  `).all(FIRST_WEEK_START);
+  const otherExpByWeek = db.prepare(`
+    SELECT ${WEEK_OF.replace('%COL%', 'expense_date')} AS wk, COALESCE(SUM(amount), 0) AS exp
+    FROM other_expenses WHERE expense_date >= ? GROUP BY wk
+  `).all(FIRST_WEEK_START);
 
-  const netByMonth = new Map();
-  for (const r of meterByMonth) netByMonth.set(r.month, (netByMonth.get(r.month) || 0) + r.mp);
-  for (const r of sheetExpByMonth) netByMonth.set(r.month, (netByMonth.get(r.month) || 0) - r.exp);
-  for (const r of otherExpByMonth) netByMonth.set(r.month, (netByMonth.get(r.month) || 0) - r.exp);
+  const netByWeek = new Map();
+  for (const r of meterByWeek) netByWeek.set(r.wk, (netByWeek.get(r.wk) || 0) + r.mp);
+  for (const r of sheetExpByWeek) netByWeek.set(r.wk, (netByWeek.get(r.wk) || 0) - r.exp);
+  for (const r of otherExpByWeek) netByWeek.set(r.wk, (netByWeek.get(r.wk) || 0) - r.exp);
 
-  const paidByMonth = new Map(paidRows.map((r) => [r.month, r]));
+  const receipts = db.prepare('SELECT received_on, amount, expense_credit FROM profit_receipts').all();
+  // Receipts on or before the close-out belong to the closed period; only later ones draw
+  // down the weekly balance.
+  let closedReceived = 0;
+  let receivedTotal = 0;
+  for (const r of receipts) {
+    const v = receiptTotal(r);
+    if (r.received_on <= CLOSE_OUT_DATE) closedReceived += v;
+    else receivedTotal += v;
+  }
 
-  const months = [...netByMonth.keys()];
-  if (months.length === 0) return [];
+  const notesByPeriod = new Map(
+    db.prepare('SELECT period, notes FROM profit_splits').all().map((r) => [r.period, r.notes]),
+  );
 
-  const thisMonth = new Date().toISOString().slice(0, 7);
-  const start = months.sort()[0];
-  const end = thisMonth > start ? thisMonth : start;
+  // The closed period's owed is defined as whatever was received in it, so its balance is
+  // zero by construction — the whole point of closing it out rather than recomputing it.
+  const rows = [{
+    period: CLOSED_PERIOD_KEY,
+    closed: true,
+    period_start: null,
+    period_end: CLOSE_OUT_DATE,
+    net_profit: null,
+    amount_40: round2(closedReceived),
+    amount_60: null,
+    owed_running: round2(closedReceived),
+    applied: round2(closedReceived),
+    coverage: 'covered',
+    notes: notesByPeriod.get(CLOSED_PERIOD_KEY) || '',
+  }];
 
-  // Walked oldest-first because the recoup carries forward: what a month splits depends on how
-  // much has already been recovered before it. Reversed at the end for display.
-  let recovered = 0;
-  let owedRunning = 0;
-  // One pool of money drawn down oldest-first. Payments arrive as lump sums that don't line
-  // up with month boundaries, so the account carries the balance and each month's coverage
-  // falls out of how far the pool reaches.
+  // One pool drawn down oldest-first, exactly as before — weeks simply replaced months.
   let pool = receivedTotal;
-  const rows = monthsBetween(start, end).map((month) => {
-    const net = netByMonth.get(month) || 0;
-    const outstanding = Math.max(0, RECOUP_TARGET - recovered);
+  let owedRunning = round2(closedReceived);
 
-    // While money is still owed, the whole month sits with the 40% side — a losing month
-    // included, so `recovered` stays an honest tally of what has actually been received
-    // rather than only counting the good months.
-    const recoupAmount = outstanding > 0 ? Math.min(net, outstanding) : 0;
-    recovered = Math.max(0, recovered + recoupAmount);
+  // Runs to the current week, or further if anything is dated beyond it. Stopping at today
+  // would silently drop a later week's profit instead of showing it.
+  const lastDated = [...netByWeek.keys()].sort().pop();
+  const through = lastDated && lastDated > todayISO() ? lastDated : todayISO();
 
-    // Whatever the recoup didn't claim is what the 40/60 applies to.
-    const splitBase = net - recoupAmount;
-    const paidRow = paidByMonth.get(month);
-
-    // Settlement is layered on top of the split, never fed back into it: `owed` is read from
-    // the already-computed entitlement so recording a receipt can't move any month's split.
-    const owed = round2(recoupAmount + splitBase * SPLIT_A);
+  for (const wk of weeksFrom(FIRST_WEEK_START, through)) {
+    const net = round2(netByWeek.get(wk) || 0);
+    const owed = round2(net * SPLIT_A);
     owedRunning = round2(owedRunning + owed);
 
     const applied = round2(Math.min(pool, owed));
     pool = round2(Math.max(0, pool - owed));
 
-    return {
-      month,
+    rows.push({
+      period: wk,
+      closed: false,
+      period_start: wk,
+      period_end: addDaysISO(wk, 6),
       net_profit: net,
-      split_label: outstanding > 0 ? 'recoup' : '40/60',
-      recoup_amount: recoupAmount,
-      split_base: splitBase,
-      recovered_to_date: recovered,
-      recoup_target: RECOUP_TARGET,
-      recoup_remaining: Math.max(0, RECOUP_TARGET - recovered),
-      amount_40: recoupAmount + splitBase * SPLIT_A,
-      amount_60: splitBase * SPLIT_B,
+      amount_40: owed,
+      amount_60: round2(net * SPLIT_B),
       owed_running: owedRunning,
       applied,
       coverage: coverageOf(owed, applied),
-      paid: Boolean(paidRow?.paid),
-      paid_at: paidRow?.paid_at || null,
-      paid_by: paidRow?.paid_by || null,
-      notes: paidRow?.notes || '',
-    };
+      notes: notesByPeriod.get(wk) || '',
+    });
+  }
+
+  const owedTotal = owedRunning;
+  const paidThrough = [...rows].reverse().find((r) => r.coverage === 'covered')?.period || null;
+
+  // Newest first for display; the closed row sits at the bottom as the oldest thing there is.
+  rows.sort((a, b) => {
+    if (a.closed) return 1;
+    if (b.closed) return -1;
+    return a.period < b.period ? 1 : -1;
   });
 
-  // Captured before the reverse so they read oldest-first.
-  const owedTotal = owedRunning;
-  const paidThrough = [...rows].reverse().find((r) => r.coverage === 'covered')?.month || null;
-
-  rows.sort((a, b) => (a.month < b.month ? 1 : -1));
   rows.owedTotal = owedTotal;
-  rows.receivedTotal = receivedTotal;
+  rows.receivedTotal = round2(closedReceived + receivedTotal);
   rows.paidThrough = paidThrough;
   return rows;
 }
 
-/**
- * The account: everything earned to date on one side, everything received on the other.
- *
- * `earned` and `received` are tracked apart on purpose — earned drives when the 40/60 starts,
- * received is what has actually landed. A gap between them is the normal state of affairs,
- * not an error.
- */
+/** Everything owed to date on one side, everything received on the other. */
 export function buildAccountSummary(rows) {
   const owedTotal = round2(rows.owedTotal || 0);
   const receivedTotal = round2(rows.receivedTotal || 0);
-  const earned = rows.length ? Math.max(...rows.map((r) => r.recovered_to_date)) : 0;
-
   return {
     owed_total: owedTotal,
     received_total: receivedTotal,
     balance: round2(owedTotal - receivedTotal),
     paid_through: rows.paidThrough,
-    recoup: {
-      target: RECOUP_TARGET,
-      earned: round2(earned),
-      // Money settles the oldest debt first, and the recoup is the oldest debt there is,
-      // so the pool fills it before anything else.
-      received: round2(Math.min(receivedTotal, RECOUP_TARGET)),
-      remaining: round2(Math.max(0, RECOUP_TARGET - Math.min(receivedTotal, RECOUP_TARGET))),
-      complete: earned >= RECOUP_TARGET,
-    },
+    close_out_date: CLOSE_OUT_DATE,
+    first_week_start: FIRST_WEEK_START,
+    split_a: SPLIT_A,
+    split_b: SPLIT_B,
   };
 }
 
-/** GET /api/profit-split — one row per month since tracking began, most recent first, plus
- * the account summary. The summary ships with the rows rather than being derived in the
- * browser so the allocation rules live in exactly one place. */
+/** GET /api/profit-split — the closed row plus one row per week, newest first, and the
+ * account summary. The summary ships with the rows rather than being derived in the browser
+ * so the allocation rules live in exactly one place. */
 profitSplitRouter.get('/', adminGate, (req, res) => {
   const rows = buildProfitSplitRows();
   res.json({ rows: [...rows], account: buildAccountSummary(rows) });
@@ -234,6 +273,9 @@ profitSplitRouter.post('/receipts', adminGate, (req, res) => {
 profitSplitRouter.delete('/receipts/:id', adminGate, (req, res) => {
   const row = db.prepare('SELECT * FROM profit_receipts WHERE id = ?').get(Number(req.params.id));
   if (!row) return res.status(404).json({ error: 'Receipt not found' });
+  if (row.created_by === CLOSE_OUT_ACTOR) {
+    return res.status(400).json({ error: 'The close-out payment is part of the settled history and cannot be deleted.' });
+  }
 
   db.prepare('DELETE FROM profit_receipts WHERE id = ?').run(row.id);
   logAudit(req, {
@@ -243,26 +285,17 @@ profitSplitRouter.delete('/receipts/:id', adminGate, (req, res) => {
   return res.json({ ok: true, id: row.id });
 });
 
+/** PATCH /api/profit-split/:period  { notes } — a comment against one week or the closed row. */
+profitSplitRouter.patch('/:period', adminGate, (req, res) => {
+  const { period } = req.params;
+  if (!PERIOD_RE.test(period)) return res.status(400).json({ error: 'Invalid period' });
+  if (req.body?.notes === undefined) return res.status(400).json({ error: 'Nothing to update' });
 
-/** PATCH /api/profit-split/:month  { paid?: boolean, notes?: string } — either field independently. */
-profitSplitRouter.patch('/:month', adminGate, (req, res) => {
-  const { month } = req.params;
-  if (!MONTH_RE.test(month)) return res.status(400).json({ error: 'Invalid month' });
-
-  const hasPaid = req.body?.paid !== undefined;
-  const hasNotes = req.body?.notes !== undefined;
-  if (!hasPaid && !hasNotes) return res.status(400).json({ error: 'Nothing to update' });
-
-  const existing = db.prepare('SELECT paid, paid_at, paid_by, notes FROM profit_splits WHERE month = ?').get(month);
-  const paid = hasPaid ? Boolean(req.body.paid) : Boolean(existing?.paid);
-  const paidBy = hasPaid ? (req.user?.email || null) : (existing?.paid_by || null);
-  const paidAt = hasPaid ? (paid ? new Date().toISOString() : null) : (existing?.paid_at || null);
-  const notes = hasNotes ? String(req.body.notes).slice(0, 2000) : (existing?.notes || null);
-
+  const notes = String(req.body.notes).slice(0, 2000);
   db.prepare(`
-    INSERT INTO profit_splits (month, paid, paid_at, paid_by, notes) VALUES (?, ?, ?, ?, ?)
-    ON CONFLICT(month) DO UPDATE SET paid = excluded.paid, paid_at = excluded.paid_at, paid_by = excluded.paid_by, notes = excluded.notes
-  `).run(month, paid ? 1 : 0, paidAt, paidBy, notes);
+    INSERT INTO profit_splits (period, notes) VALUES (?, ?)
+    ON CONFLICT(period) DO UPDATE SET notes = excluded.notes
+  `).run(period, notes);
 
-  res.json({ ok: true, month, paid, paid_at: paidAt, paid_by: paidBy, notes: notes || '' });
+  res.json({ ok: true, period, notes });
 });

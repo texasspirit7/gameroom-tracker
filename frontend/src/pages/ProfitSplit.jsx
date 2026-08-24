@@ -2,13 +2,24 @@ import { useEffect, useLayoutEffect, useRef, useState } from 'react';
 import { api, fmt, signedMoney } from '../api.js';
 import { todayISO } from '../dateRange.js';
 
-const MONTHS = ['January', 'February', 'March', 'April', 'May', 'June',
-  'July', 'August', 'September', 'October', 'November', 'December'];
+const MONTHS = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
 
-const monthLabel = (ym) => {
-  const [y, m] = ym.split('-').map(Number);
-  return `${MONTHS[m - 1]} ${y}`;
+const dayLabel = (iso) => {
+  const [y, m, d] = iso.split('-').map(Number);
+  return `${MONTHS[m - 1]} ${d}, ${y}`;
 };
+
+/** "Aug 24 – Aug 30, 2026", collapsing the year when both ends share it. */
+const weekLabel = (from, to) => {
+  const [fy, fm, fd] = from.split('-').map(Number);
+  const [ty, tm, td] = to.split('-').map(Number);
+  const left = `${MONTHS[fm - 1]} ${fd}`;
+  const right = `${MONTHS[tm - 1]} ${td}`;
+  return fy === ty ? `${left} – ${right}, ${ty}` : `${left}, ${fy} – ${right}, ${ty}`;
+};
+
+const periodLabel = (r) =>
+  r.closed ? `Everything through ${dayLabel(r.period_end)}` : weekLabel(r.period_start, r.period_end);
 
 const COVERAGE = {
   covered: { cls: 'verified', label: 'Covered' },
@@ -19,6 +30,10 @@ const COVERAGE = {
 
 /** Payments visible before the ledger starts scrolling. */
 const LEDGER_VISIBLE = 5;
+
+/** Seeded rows (the close-out) are settled history — the API refuses to delete them, so the
+ *  page must not offer a button that can only fail. */
+const isSeeded = (rc) => String(rc.created_by || '').startsWith('system:');
 
 const emptyForm = () => ({ received_on: todayISO(), amount: '', expense_credit: '', note: '' });
 
@@ -115,10 +130,10 @@ export default function ProfitSplit() {
   };
 
   const saveNotes = async (row) => {
-    const draft = notesDraft[row.month];
+    const draft = notesDraft[row.period];
     if (draft === undefined || draft === row.notes) return;
     try {
-      await api.setProfitSplitNotes(row.month, draft);
+      await api.setProfitSplitNotes(row.period, draft);
       await load();
     } catch (e) {
       setError(e.message);
@@ -129,9 +144,7 @@ export default function ProfitSplit() {
   if (!data) return <p className="muted"><span className="spinner" />Loading…</p>;
 
   const { rows, account } = data;
-  const { recoup } = account;
-  const pct = (n) => `${Math.min(100, recoup.target ? (n / recoup.target) * 100 : 0)}%`;
-  const earningMonths = rows.filter((r) => r.amount_40 > 0).length;
+  const earningWeeks = rows.filter((r) => !r.closed && r.amount_40 > 0).length;
   const owedPct = account.owed_total
     ? `${Math.min(100, (account.received_total / account.owed_total) * 100)}%`
     : '0%';
@@ -140,9 +153,9 @@ export default function ProfitSplit() {
     <>
       <h1 className="page-title">Profit Split</h1>
       <div className="page-sub">
-        Monthly net profit (after overhead). The 40% side takes every month in full until
-        ${fmt(recoup.target)} has been earned; from there it splits 40/60. Each month adds to
-        what you’re owed — payments draw down the running balance.
+        Weekly net profit (after overhead), split 40/60, with each week running Monday through
+        Sunday. Every week adds to what you’re owed — payments draw down the running balance.
+        Everything up to {dayLabel(account.close_out_date)} was settled separately and is closed.
       </div>
       {error && <div className="error-box">{error}</div>}
 
@@ -151,7 +164,8 @@ export default function ProfitSplit() {
           <span className="account-label">Owed to date</span>
           <span className="account-fig">${fmt(account.owed_total)}</span>
           <span className="muted">
-            across {earningMonths} {earningMonths === 1 ? 'month' : 'months'}
+            {earningWeeks === 0 ? 'closed period only'
+              : `closed period + ${earningWeeks} ${earningWeeks === 1 ? 'week' : 'weeks'}`}
           </span>
         </div>
         <div className="account-card">
@@ -165,7 +179,9 @@ export default function ProfitSplit() {
             ${fmt(Math.abs(account.balance))}{account.balance < 0 ? ' over' : ''}
           </span>
           <span className="muted">
-            {account.paid_through ? `paid up through ${monthLabel(account.paid_through)}` : 'nothing covered yet'}
+            {account.paid_through === 'closed' ? 'closed period settled'
+              : account.paid_through ? `paid up through ${dayLabel(account.paid_through)}`
+              : 'nothing covered yet'}
           </span>
         </div>
       </div>
@@ -178,30 +194,10 @@ export default function ProfitSplit() {
           </span>
         </h2>
         <div className="recoup-bar"><i style={{ width: owedPct }} /></div>
-
-        <h2 className="stacked-h">
-          Recoup — first ${fmt(recoup.target)}
-          <span className="panel-count">
-            {recoup.remaining > 0 ? `$${fmt(recoup.remaining)} still to collect` : 'fully collected'}
-          </span>
-        </h2>
-        {/* Two tracks on one bar: the outer shows profit earned (which decides when the
-            40/60 starts), the inner shows cash actually collected against it. */}
-        <div className="recoup-bar recoup-bar-dual">
-          <i className="earned" style={{ width: pct(recoup.earned) }} />
-          <i className="received" style={{ width: pct(recoup.received) }} />
-        </div>
-        <div className="recoup-legend">
-          <span><b className="swatch earned" /> ${fmt(recoup.earned)} earned</span>
-          <span><b className="swatch received" /> ${fmt(recoup.received)} received</span>
-          <span className="muted">${fmt(recoup.target)} target</span>
-        </div>
-        {recoup.complete && recoup.remaining > 0 && (
-          <p className="muted recoup-note">
-            The 30k has been earned, so months now split 40/60 — but ${fmt(recoup.remaining)} of it
-            hasn’t reached you yet.
-          </p>
-        )}
+        <p className="muted recoup-note">
+          Weeks run Monday to Sunday, splitting 40/60. The first began
+          {' '}{dayLabel(account.first_week_start)}.
+        </p>
       </div>
 
       <div className="panel">
@@ -248,7 +244,11 @@ export default function ProfitSplit() {
                   <td>{rc.expense_credit ? `$${fmt(rc.expense_credit)}` : '—'}</td>
                   <td><b>${fmt(rc.amount + rc.expense_credit)}</b></td>
                   <td className="muted">{rc.note || '—'}</td>
-                  <td><button className="danger row-action" onClick={() => removeReceipt(rc)}>Delete</button></td>
+                  <td>
+                    {isSeeded(rc)
+                      ? <span className="muted" title="Settled history — cannot be removed">locked</span>
+                      : <button className="danger row-action" onClick={() => removeReceipt(rc)}>Delete</button>}
+                  </td>
                 </tr>
               ))}
             </tbody>
@@ -263,19 +263,19 @@ export default function ProfitSplit() {
       </div>
 
       <div className="panel">
-        <h2>By month<span className="panel-count">what each month added to the balance</span></h2>
+        <h2>By week<span className="panel-count">Monday to Sunday</span></h2>
         {rows.length === 0 ? (
-          <p className="muted">No months on record yet.</p>
+          <p className="muted">Nothing on record yet.</p>
         ) : (
           <table className="split-table">
             <thead>
               <tr>
-                <th>Month</th>
+                <th>Period</th>
                 <th>Net Profit</th>
-                <th title="What this month added to what you're owed">Owed (40%)</th>
+                <th title="What this week added to what you're owed">Owed (40%)</th>
                 <th>60% Side</th>
-                <th title="Cumulative amount owed through this month">Running Total</th>
-                <th title="Payments fill the oldest months first">Coverage</th>
+                <th title="Cumulative amount owed">Running Total</th>
+                <th title="Payments fill the oldest periods first">Coverage</th>
                 <th>Comments</th>
               </tr>
             </thead>
@@ -283,14 +283,18 @@ export default function ProfitSplit() {
               {rows.map((r) => {
                 const cv = COVERAGE[r.coverage];
                 return (
-                  <tr key={r.month}>
+                  <tr key={r.period} className={r.closed ? 'closed-period' : undefined}>
                     <td>
-                      {monthLabel(r.month)}
-                      {r.recoup_amount > 0 && <span className="badge review" style={{ marginLeft: 8 }}>recoup</span>}
+                      {periodLabel(r)}
+                      {r.closed && <span className="badge verified" style={{ marginLeft: 8 }}>closed</span>}
                     </td>
-                    <td className={r.net_profit >= 0 ? 'pos' : 'neg'}>{signedMoney(r.net_profit)}</td>
+                    {/* The closed period is a settled lump sum, not a computed week — it has no
+                        net profit or 60% side to show. */}
+                    <td className={r.closed ? 'muted' : (r.net_profit >= 0 ? 'pos' : 'neg')}>
+                      {r.closed ? '—' : signedMoney(r.net_profit)}
+                    </td>
                     <td>${fmt(r.amount_40)}</td>
-                    <td className="muted">${fmt(r.amount_60)}</td>
+                    <td className="muted">{r.closed ? '—' : `$${fmt(r.amount_60)}`}</td>
                     <td className="muted">${fmt(r.owed_running)}</td>
                     <td>
                       <span className={`badge ${cv.cls}`}>{cv.label}</span>
@@ -303,8 +307,8 @@ export default function ProfitSplit() {
                     <td>
                       <textarea
                         rows={2} className="split-notes-cell" placeholder="Add a comment…"
-                        value={notesDraft[r.month] ?? r.notes}
-                        onChange={(e) => setNotesDraft((prev) => ({ ...prev, [r.month]: e.target.value }))}
+                        value={notesDraft[r.period] ?? r.notes}
+                        onChange={(e) => setNotesDraft((prev) => ({ ...prev, [r.period]: e.target.value }))}
                         onBlur={() => saveNotes(r)}
                       />
                     </td>
