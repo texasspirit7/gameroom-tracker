@@ -58,7 +58,7 @@ db.exec(`
 
   CREATE TABLE IF NOT EXISTS sheets (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
-    sheet_date TEXT NOT NULL,                       -- YYYY-MM-DD (single location) — not unique, multiple sheets per date allowed (e.g. separate shifts)
+    sheet_date TEXT NOT NULL,                       -- YYYY-MM-DD (single location) — one sheet per day, enforced on upload and on date edits
     source TEXT NOT NULL DEFAULT 'image',           -- 'image' | 'xlsx' | 'seed'
     file_path TEXT,
     total_in REAL NOT NULL DEFAULT 0,

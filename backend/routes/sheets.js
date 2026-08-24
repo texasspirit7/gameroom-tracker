@@ -76,6 +76,23 @@ export function resolveSheetDate({ providedDate, extractedDate, lastSheetDate, t
   return { date: guess(), source: 'guessed' };
 }
 
+/**
+ * The sheet already occupying a date, if any.
+ *
+ * One sheet per day is a hard rule: replacing a day means deleting its sheet first. Without
+ * that, a re-upload silently doubles every total that day feeds — dashboard figures, machine
+ * meters, and the profit split, which is real money.
+ */
+function sheetOnDate(date, exceptId = null) {
+  return exceptId == null
+    ? db.prepare('SELECT id FROM sheets WHERE sheet_date = ? ORDER BY id LIMIT 1').get(date)
+    : db.prepare('SELECT id FROM sheets WHERE sheet_date = ? AND id != ? ORDER BY id LIMIT 1').get(date, exceptId);
+}
+
+const duplicateDateError = (date, existing) =>
+  `A sheet already exists for ${date} (sheet #${existing.id}). Only one sheet per day is allowed — `
+  + 'delete that sheet first, then upload this one.';
+
 function saveUploadedFile(file, sheetDate) {
   const ext = path.extname(file.originalname).toLowerCase() || '.bin';
   const name = `${sheetDate || 'undated'}-${Date.now()}${ext}`;
@@ -170,6 +187,14 @@ sheetsRouter.post('/upload', upload.single('file'), async (req, res) => {
       return res.status(400).json({ error: `Unsupported file type "${ext}". Upload .xlsx or a photo (.jpg/.png/.webp).` });
     }
 
+    // Checked before extraction when the date is already known: an image upload would
+    // otherwise spend a Claude vision call only to be rejected.
+    const providedDate = req.body.sheet_date;
+    if (providedDate && DATE_RE.test(providedDate)) {
+      const clash = sheetOnDate(providedDate);
+      if (clash) return res.status(409).json({ error: duplicateDateError(providedDate, clash) });
+    }
+
     const extracted = isXlsx
       ? extractFromXlsx(req.file.buffer)
       : await extractFromImage(req.file.buffer);
@@ -212,13 +237,15 @@ sheetsRouter.post('/upload', upload.single('file'), async (req, res) => {
       );
     }
 
-    // Multiple sheets per date are allowed (e.g. separate shifts) — just flag it,
-    // don't block the upload.
-    const existing = db.prepare('SELECT id FROM sheets WHERE sheet_date = ? ORDER BY id').all(sheetDate);
-    if (existing.length) {
-      warnings.push(
-        `${existing.length} other sheet${existing.length === 1 ? '' : 's'} already exist${existing.length === 1 ? 's' : ''} for ${sheetDate} (#${existing.map((s) => s.id).join(', #')})`
-      );
+    // Re-checked after resolution, since the date may have come off the sheet or been guessed
+    // rather than supplied. Deliberately before the file is written, so a rejected upload
+    // leaves nothing behind on disk.
+    const clash = sheetOnDate(sheetDate);
+    if (clash) {
+      const how = dateSource === 'extracted' ? ' That date was read off the sheet itself.'
+        : dateSource === 'guessed' ? ' No date was found on the sheet, so that day was inferred from the last sheet on record.'
+        : '';
+      return res.status(409).json({ error: duplicateDateError(sheetDate, clash) + how });
     }
 
     const filePath = saveUploadedFile(req.file, sheetDate);
@@ -320,8 +347,15 @@ sheetsRouter.patch('/:id', adminGate, (req, res) => {
     'end_bank', 'cash_profit', 'notes', 'sheet_date'];
   for (const key of allowed) {
     if (fields[key] !== undefined) {
-      if (key === 'sheet_date' && !DATE_RE.test(String(fields[key]))) {
-        return res.status(400).json({ error: 'sheet_date must be YYYY-MM-DD' });
+      if (key === 'sheet_date') {
+        if (!DATE_RE.test(String(fields[key]))) {
+          return res.status(400).json({ error: 'sheet_date must be YYYY-MM-DD' });
+        }
+        // Editing a date is the other way a day could end up with two sheets.
+        const clash = sheetOnDate(String(fields[key]), id);
+        if (clash) {
+          return res.status(409).json({ error: duplicateDateError(String(fields[key]), clash) });
+        }
       }
       db.prepare(`UPDATE sheets SET ${key} = ? WHERE id = ?`).run(fields[key], id);
     }

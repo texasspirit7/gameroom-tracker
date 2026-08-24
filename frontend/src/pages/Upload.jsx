@@ -7,11 +7,12 @@ export default function Upload() {
   const [fileError, setFileError] = useState(null);
   const [drag, setDrag] = useState(false);
   const inputRef = useRef(null);
-  const { isUploading, startUpload } = useUpload();
+  const { isUploading, startUpload, uploadError, clear } = useUpload();
 
   const pick = (f) => {
     setFile(f || null);
     setFileError(null);
+    clear();
   };
 
   const submit = () => {
@@ -26,8 +27,8 @@ export default function Upload() {
       <div className="page-sub">
         Excel (.xlsx) is read directly. Photos (.jpg/.png) are read with AI — always review before verifying.
         The sheet date is auto-detected from the sheet itself — only set it manually if you need to override
-        that (e.g. backfilling, or the date wasn't readable). Uploading more than one sheet on the same date
-        is fine (e.g. separate shifts) — both are kept.
+        that (e.g. backfilling, or the date wasn't readable). Only one sheet is kept per day — to replace
+        a day, delete its existing sheet first.
       </div>
 
       <div className="panel">
@@ -66,6 +67,9 @@ export default function Upload() {
             </div>
 
             {fileError && <div className="error-box">{fileError}</div>}
+            {/* Also shown in the sidebar, but repeated here: a rejection needs to be visible
+                where the upload was started, not only in the corner of the screen. */}
+            {uploadError && <div className="error-box">{uploadError}</div>}
           </>
         )}
       </div>
