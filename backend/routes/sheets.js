@@ -127,6 +127,19 @@ function persistSheet({ extracted, sheetDate, source, filePath, warnings }) {
     }
   }
 
+  // The printed Profit (Loss) box isn't trusted for the stored figure, but it is a useful
+  // second opinion. Disagreeing in sign means one of the two was misread — most often a loss
+  // that lost its parentheses on the way in, which is invisible once stored.
+  const printedProfit = extracted.bank?.meter_profit;
+  if (printedProfit != null && printedProfit !== 0 && meterProfit !== 0
+      && Math.sign(printedProfit) !== Math.sign(meterProfit)) {
+    const show = (n) => `${n < 0 ? '-' : ''}$${Math.abs(n).toLocaleString()}`;
+    warnings.push(
+      `The sheet's printed Profit (Loss) box reads ${show(printedProfit)}, but the machine totals come ` +
+      `to ${show(meterProfit)}. A figure in parentheses is a loss — check the sign before verifying.`
+    );
+  }
+
   const insertSheet = db.prepare(`
     INSERT INTO sheets (sheet_date, source, file_path, total_in, total_out, match_amount,
       loan_rtn, start_bank, end_bank, meter_profit, cash_profit, over_short, status, validation_json)
