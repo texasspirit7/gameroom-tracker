@@ -4,13 +4,14 @@ import { buildPresets, formatRangeLabel } from './dateRange.js';
 const DateRangeContext = createContext(null);
 
 /**
- * Every page opens on the current month.
+ * Every page opens on the current Monday-to-Sunday week, matching the period the profit
+ * split now settles on.
  *
  * The selection deliberately isn't persisted: a change lasts for the session and is dropped on
  * refresh or a fresh sign-in, so you always start from the same known window rather than
  * inheriting a range you set days ago and forgot about.
  */
-export const DEFAULT_RANGE_KEY = 'mtd';
+export const DEFAULT_RANGE_KEY = 'wtd';
 
 /** Left over from when the selection was persisted — cleared so it can't resurface later. */
 const LEGACY_STORAGE_KEY = 'grt_date_range';

@@ -15,11 +15,16 @@ export const addDays = (iso, delta) => {
   return toISO(d);
 };
 
+/** Monday of the week containing `iso` — getDay() is 0 for Sunday, which belongs to the
+ *  week that began six days earlier. */
 const startOfWeek = (iso) => {
   const d = parseISO(iso);
   d.setDate(d.getDate() - ((d.getDay() + 6) % 7));
   return toISO(d);
 };
+
+/** The Sunday closing the week containing `iso`. */
+const endOfWeek = (iso) => addDays(startOfWeek(iso), 6);
 
 const startOfMonth = (iso) => {
   const d = parseISO(iso);
@@ -65,7 +70,9 @@ export function buildPresets() {
     { key: 'today', label: 'Today', from: today, to: today },
     { key: 'yesterday', label: 'Yesterday', from: yesterday, to: yesterday },
     { key: 'last7', label: 'Last 7 Days', from: addDays(today, -6), to: today },
-    { key: 'wtd', label: 'This Week', from: wtdFrom, to: today },
+    // The whole Monday-to-Sunday week, not week-to-date: the end date runs to Sunday even
+    // when that's still ahead, matching how the profit split closes out its weeks.
+    { key: 'wtd', label: 'This Week', from: wtdFrom, to: endOfWeek(today) },
     { key: 'lastWeek', label: 'Last Week', from: lastWeekFrom, to: lastWeekTo },
     // The whole calendar month, not month-to-date: the end date runs to the last of the month
     // even when that's still in the future, so the window doesn't creep forward day by day.
