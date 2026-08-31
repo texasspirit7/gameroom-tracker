@@ -62,7 +62,7 @@ export default function Dashboard() {
 
   const {
     totals, previous, buckets, alerts, expenses, otherExpensesTotal, deadMachines,
-    recentSheets = [], topMachines = [], range, chartGranularity, latestDate,
+    recentSheets = [], topMachines = [], range, chartGranularity, latestDate, weeklyTrend = [],
   } = data;
   const hasData = totals.sheet_count > 0;
   const chartNoun = chartGranularity === 'month' ? 'month' : chartGranularity === 'week' ? 'week' : 'day';
@@ -145,6 +145,27 @@ export default function Dashboard() {
       </div>
 
       <div className="panel">
+        <h2>
+          Profit trend by week
+          <span className="panel-count">last {weeklyTrend.length} weeks · Mon–Sun</span>
+        </h2>
+        {weeklyTrend.some((w) => w.net_profit || w.expenses) ? (
+          <ResponsiveContainer width="100%" height={280}>
+            <LineChart data={weeklyTrend} margin={{ top: 6, right: 16, left: 0, bottom: 0 }}>
+              <CartesianGrid strokeDasharray="3 3" stroke={CHART.grid} />
+              <XAxis dataKey="label" {...axisProps} />
+              <YAxis {...axisProps} />
+              <Tooltip formatter={(v) => `$${fmt(v)}`} {...tooltipProps} />
+              <Legend />
+              <ReferenceLine y={0} stroke={CHART.zero} />
+              <Line type="monotone" dataKey="net_profit" name="Net Profit" stroke={CHART.netProfit} strokeWidth={2} dot={{ r: 3 }} />
+              <Line type="monotone" dataKey="expenses" name="Expenses" stroke={CHART.expenses} strokeWidth={2} dot={{ r: 3 }} />
+            </LineChart>
+          </ResponsiveContainer>
+        ) : <p className="muted">No sheets in the last {weeklyTrend.length} weeks.</p>}
+      </div>
+
+      <div className="panel">
         <h2>Profit trend by {chartNoun}</h2>
         {hasData ? (
           <ResponsiveContainer width="100%" height={280}>
@@ -155,12 +176,10 @@ export default function Dashboard() {
               <Tooltip formatter={(v) => `$${fmt(v)}`} {...tooltipProps} />
               <Legend />
               <ReferenceLine y={0} stroke={CHART.zero} />
-              <Line type="monotone" dataKey="total_in" name="Total In" stroke={CHART.totalIn} strokeWidth={2} dot={{ r: 3 }} />
-              <Line type="monotone" dataKey="total_out" name="Total Out" stroke={CHART.totalOut} strokeWidth={2} dot={{ r: 3 }} />
-              <Line type="monotone" dataKey="match" name="Match" stroke={CHART.match} strokeWidth={2} dot={{ r: 3 }} />
-              <Line type="monotone" dataKey="expenses" name="Expenses" stroke={CHART.expenses} strokeWidth={2} dot={{ r: 3 }} />
-              <Line type="monotone" dataKey="meter_profit" name="Meter Profit" stroke={CHART.meterProfit} strokeWidth={2} dot={{ r: 3 }} />
+              {/* Net profit and expenses only — in/out/match/meter crowded the axis and are
+                  already broken out in the panels below. */}
               <Line type="monotone" dataKey="net_profit" name="Net Profit" stroke={CHART.netProfit} strokeWidth={2} dot={{ r: 3 }} />
+              <Line type="monotone" dataKey="expenses" name="Expenses" stroke={CHART.expenses} strokeWidth={2} dot={{ r: 3 }} />
             </LineChart>
           </ResponsiveContainer>
         ) : <p className="muted">No data in this range.</p>}

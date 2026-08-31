@@ -153,6 +153,55 @@ function alertsForRange(from, to, label) {
 }
 
 /** How many sheets/machines the dashboard's summary strips carry. */
+const WEEKLY_TREND_WEEKS = 12;
+
+/**
+ * Net profit and expenses per Monday–Sunday week, for the last WEEKLY_TREND_WEEKS weeks.
+ *
+ * Deliberately ignores the page's date range. The default range is a single week, over which
+ * a weekly trend would be one point and tell you nothing — so like the Analytics leaderboard,
+ * this panel answers a question the range picker isn't asking.
+ */
+export function buildWeeklyTrend() {
+  const today = new Date().toISOString().slice(0, 10);
+  const thisMonday = bucketKey(today, 'week');
+  const from = addDays(thisMonday, -7 * (WEEKLY_TREND_WEEKS - 1));
+  const to = addDays(thisMonday, 6);
+
+  const sheetRows = db.prepare(
+    'SELECT sheet_date, meter_profit FROM sheets WHERE sheet_date BETWEEN ? AND ?'
+  ).all(from, to);
+  const sheetExpenses = db.prepare(`
+    SELECT s.sheet_date AS d, SUM(e.amount) AS amount FROM expenses e
+    JOIN sheets s ON s.id = e.sheet_id WHERE s.sheet_date BETWEEN ? AND ? GROUP BY s.sheet_date
+  `).all(from, to);
+  const otherExpenses = db.prepare(
+    'SELECT expense_date AS d, amount FROM other_expenses WHERE expense_date BETWEEN ? AND ?'
+  ).all(from, to);
+
+  // Seeded with every week in the window, including empty ones — a quiet week should read as
+  // zero on the chart rather than closing the gap and flattering the trend.
+  const weeks = new Map();
+  for (let i = 0; i < WEEKLY_TREND_WEEKS; i += 1) {
+    const key = addDays(from, i * 7);
+    weeks.set(key, { period: key, label: bucketLabel(key, 'week'), meter_profit: 0, expenses: 0 });
+  }
+  const into = (date, apply) => {
+    const w = weeks.get(bucketKey(date, 'week'));
+    if (w) apply(w);
+  };
+  for (const r of sheetRows) into(r.sheet_date, (w) => { w.meter_profit += r.meter_profit || 0; });
+  for (const r of sheetExpenses) into(r.d, (w) => { w.expenses += r.amount || 0; });
+  for (const r of otherExpenses) into(r.d, (w) => { w.expenses += r.amount || 0; });
+
+  return [...weeks.values()].map((w) => ({
+    period: w.period,
+    label: w.label,
+    expenses: w.expenses,
+    net_profit: w.meter_profit - w.expenses,
+  }));
+}
+
 const RECENT_SHEET_COUNT = 3;
 const TOP_MACHINE_COUNT = 5;
 
@@ -294,6 +343,7 @@ dashboardRouter.get('/', (req, res) => {
     previous,
     chartGranularity: chartGran,
     buckets,
+    weeklyTrend: buildWeeklyTrend(),
     alerts,
     expenses,
     otherExpensesTotal: totals.other_expenses,

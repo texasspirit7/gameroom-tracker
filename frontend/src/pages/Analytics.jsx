@@ -1,7 +1,7 @@
 import { Fragment, useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import {
-  ResponsiveContainer, BarChart, Bar, LineChart, Line, XAxis, YAxis, Tooltip, CartesianGrid, Cell, ReferenceLine, Legend,
+  ResponsiveContainer, LineChart, Line, XAxis, YAxis, Tooltip, CartesianGrid, ReferenceLine, Legend,
 } from 'recharts';
 import { api, fmt, signedMoney } from '../api.js';
 import { useLocalDateRange } from '../DateRangeContext.jsx';
@@ -22,6 +22,26 @@ const METRICS = [
   { key: 'meter_profit', label: 'Meter Profit', field: 'avg_meter_profit' },
   { key: 'net_profit', label: 'Net Profit', field: 'avg_net_profit' },
 ];
+
+/**
+ * A line point coloured by sign, the way the bars used to be — a single stroke can't show
+ * whether a period was up or down, so the dots carry it.
+ *
+ * Also the click target for the machine drill-down. The table rows below stay clickable too,
+ * so a small dot is never the only way in.
+ */
+function SignedDot({ cx, cy, payload, field, neutral, onSelect, active }) {
+  if (cx == null || cy == null) return null;
+  const value = payload?.[field] ?? 0;
+  const color = neutral ? CHART.totalIn : value >= 0 ? CHART.good : CHART.bad;
+  return (
+    <circle
+      cx={cx} cy={cy} r={active ? 6 : 4}
+      fill={color} stroke={color} cursor="pointer"
+      onClick={() => onSelect(payload)}
+    />
+  );
+}
 
 function MetricValue({ value, metric }) {
   const formatted = metric.neutral ? `$${fmt(value)}` : signedMoney(value);
@@ -74,18 +94,30 @@ function PeriodSection({ title, columnLabel, description, fetchSummary, fetchMac
       ) : (
         <>
           <ResponsiveContainer width="100%" height={220}>
-            <BarChart data={rows} margin={{ top: 6, right: 16, left: 0, bottom: 0 }}>
+            <LineChart data={rows} margin={{ top: 6, right: 16, left: 0, bottom: 0 }}>
               <CartesianGrid strokeDasharray="3 3" stroke={CHART.grid} />
               <XAxis dataKey="label" {...axisProps} />
               <YAxis {...axisProps} />
               <Tooltip formatter={(v) => `$${fmt(v)}`} {...tooltipProps} />
               <ReferenceLine y={0} stroke={CHART.zero} />
-              <Bar dataKey={metric.field} name={`Avg ${metric.label}`} radius={[3, 3, 0, 0]} onClick={select} cursor="pointer">
-                {rows.map((r) => (
-                  <Cell key={r.key} fill={metric.neutral ? CHART.totalIn : r[metric.field] >= 0 ? CHART.good : CHART.bad} />
-                ))}
-              </Bar>
-            </BarChart>
+              {/* dot/activeDot are passed as elements, not render functions: recharts clones
+                  these with cx/cy/payload, and the function form silently skips the dot layer
+                  entirely whenever a series has more than one point. */}
+              <Line
+                type="monotone"
+                dataKey={metric.field}
+                name={`Avg ${metric.label}`}
+                stroke={CHART.netProfit}
+                strokeWidth={2}
+                // Recharts withholds the dot layer until the entrance animation reports
+                // finished, and that callback is unreliable — a bar was always clickable, so
+                // gating this chart's only click target behind an animation would be a
+                // regression. These are small comparison charts; nothing is lost.
+                isAnimationActive={false}
+                dot={<SignedDot field={metric.field} neutral={metric.neutral} onSelect={select} />}
+                activeDot={<SignedDot field={metric.field} neutral={metric.neutral} onSelect={select} active />}
+              />
+            </LineChart>
           </ResponsiveContainer>
 
           <table style={{ marginTop: 12 }}>
