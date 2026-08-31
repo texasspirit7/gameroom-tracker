@@ -145,8 +145,8 @@ export default function ProfitSplit() {
 
   const { rows, account } = data;
   const earningWeeks = rows.filter((r) => !r.closed && r.amount_40 > 0).length;
-  const owedPct = account.owed_total
-    ? `${Math.min(100, (account.received_total / account.owed_total) * 100)}%`
+  const targetPct = account.target
+    ? `${Math.min(100, (account.owed_total / account.target) * 100)}%`
     : '0%';
 
   return (
@@ -188,15 +188,16 @@ export default function ProfitSplit() {
 
       <div className="panel">
         <h2>
-          Balance
+          Running total
           <span className="panel-count">
-            ${fmt(account.received_total)} of ${fmt(account.owed_total)} collected
+            ${fmt(account.owed_total)} of ${fmt(account.target)}
           </span>
         </h2>
-        <div className="recoup-bar"><i style={{ width: owedPct }} /></div>
+        <div className="recoup-bar"><i style={{ width: targetPct }} /></div>
         <p className="muted recoup-note">
-          Weeks run Monday to Sunday, splitting 40/60. The first began
-          {' '}{dayLabel(account.first_week_start)}.
+          {account.target_reached
+            ? `Target reached — $${fmt(account.owed_total)} owed to date.`
+            : `$${fmt(account.target_remaining)} to go. Weeks run Monday to Sunday, splitting 40/60; the first began ${dayLabel(account.first_week_start)}.`}
         </p>
       </div>
 

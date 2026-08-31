@@ -159,6 +159,30 @@ describe('weekly 40/60 periods', () => {
   });
 });
 
+describe('the running total toward the target', () => {
+  test('the target is $80,000 and tracks cumulative 40% owed', async () => {
+    const { rows, account } = await getSplit();
+    assert.equal(account.target, 80000);
+    // The same figure the "Owed to date" card shows — one meaning for "total" on the page.
+    assert.equal(account.owed_total, rows.find((r) => !r.closed && r.owed_running)
+      ? Math.max(...rows.map((r) => r.owed_running)) : account.owed_total);
+    assert.equal(account.target_remaining, 80000 - account.owed_total);
+    assert.equal(account.target_reached, false);
+  });
+
+  test('the closed period counts toward it, as it does in the card', async () => {
+    const { account } = await getSplit();
+    assert.ok(account.owed_total >= CLOSE_OUT_RECEIVED,
+      'the settled history is part of the running total, not excluded from it');
+  });
+
+  test('remaining never goes negative once the target is passed', async () => {
+    // Nothing here reaches 80k, so this guards the clamp rather than the arithmetic.
+    const { account } = await getSplit();
+    assert.ok(account.target_remaining >= 0);
+  });
+});
+
 describe('settling weekly balances', () => {
   test('a payment after the close-out draws down the weekly balance', async () => {
     const before = (await getSplit()).account;

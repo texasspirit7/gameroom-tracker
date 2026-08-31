@@ -18,6 +18,13 @@ const SPLIT_B = 0.6; // 60%
  */
 export const CLOSE_OUT_DATE = '2026-08-23';   // a Sunday
 export const CLOSE_OUT_RECEIVED = 7400;
+/**
+ * The running target for the 40% side: cumulative amount owed, closed period included, so it
+ * tracks the same "Owed to date" figure the page already shows rather than a second,
+ * differently-scoped total.
+ */
+export const RUNNING_TARGET = 80000;
+
 /** The Monday after the close-out — the first day of the first weekly period. */
 export const FIRST_WEEK_START = '2026-08-24';
 export const CLOSED_PERIOD_KEY = 'closed';
@@ -214,6 +221,9 @@ export function buildAccountSummary(rows) {
     received_total: receivedTotal,
     balance: round2(owedTotal - receivedTotal),
     paid_through: rows.paidThrough,
+    target: RUNNING_TARGET,
+    target_remaining: round2(Math.max(0, RUNNING_TARGET - owedTotal)),
+    target_reached: owedTotal >= RUNNING_TARGET,
     close_out_date: CLOSE_OUT_DATE,
     first_week_start: FIRST_WEEK_START,
     split_a: SPLIT_A,
