@@ -147,7 +147,11 @@ export default function Dashboard() {
       <div className="panel">
         <h2>
           Profit trend by week
-          <span className="panel-count">last {weeklyTrend.length} weeks · Mon–Sun</span>
+          {/* Says "last N" only when the window is genuinely the full lookback — once it's
+              clamped to the first sheet on record, "last 9 weeks" would be misleading. */}
+          <span className="panel-count">
+            {weeklyTrend.length >= 12 ? 'last 12 weeks' : `since ${weeklyTrend[0]?.label.split('–')[0] ?? 'the start'}`} · Mon–Sun
+          </span>
         </h2>
         {weeklyTrend.some((w) => w.net_profit || w.expenses) ? (
           <ResponsiveContainer width="100%" height={280}>
@@ -162,7 +166,7 @@ export default function Dashboard() {
               <Line type="monotone" dataKey="expenses" name="Expenses" stroke={CHART.expenses} strokeWidth={2} dot={{ r: 3 }} />
             </LineChart>
           </ResponsiveContainer>
-        ) : <p className="muted">No sheets in the last {weeklyTrend.length} weeks.</p>}
+        ) : <p className="muted">Nothing recorded yet.</p>}
       </div>
 
       <div className="panel">

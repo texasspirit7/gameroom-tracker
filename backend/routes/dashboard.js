@@ -163,9 +163,21 @@ const WEEKLY_TREND_WEEKS = 12;
  * this panel answers a question the range picker isn't asking.
  */
 export function buildWeeklyTrend() {
+  // Nothing recorded at all — the chart says so rather than drawing a flat line through
+  // twelve empty weeks.
+  const earliest = [
+    db.prepare('SELECT MIN(sheet_date) AS d FROM sheets').get().d,
+    db.prepare('SELECT MIN(expense_date) AS d FROM other_expenses').get().d,
+  ].filter(Boolean).sort()[0];
+  if (!earliest) return [];
+
   const today = new Date().toISOString().slice(0, 10);
   const thisMonday = bucketKey(today, 'week');
-  const from = addDays(thisMonday, -7 * (WEEKLY_TREND_WEEKS - 1));
+  const windowStart = addDays(thisMonday, -7 * (WEEKLY_TREND_WEEKS - 1));
+  // Never reaches back past the first thing on record: weeks before anything existed are
+  // empty by definition, and a flat run-up reads as a slump rather than as no data.
+  const firstWeek = bucketKey(earliest, 'week');
+  const from = firstWeek > windowStart ? firstWeek : windowStart;
   const to = addDays(thisMonday, 6);
 
   const sheetRows = db.prepare(
@@ -179,11 +191,10 @@ export function buildWeeklyTrend() {
     'SELECT expense_date AS d, amount FROM other_expenses WHERE expense_date BETWEEN ? AND ?'
   ).all(from, to);
 
-  // Seeded with every week in the window, including empty ones — a quiet week should read as
-  // zero on the chart rather than closing the gap and flattering the trend.
+  // Seeded with every week from there to now, including empty ones — a quiet week in the
+  // middle should read as zero rather than closing the gap and flattering the trend.
   const weeks = new Map();
-  for (let i = 0; i < WEEKLY_TREND_WEEKS; i += 1) {
-    const key = addDays(from, i * 7);
+  for (let key = from; key <= thisMonday; key = addDays(key, 7)) {
     weeks.set(key, { period: key, label: bucketLabel(key, 'week'), meter_profit: 0, expenses: 0 });
   }
   const into = (date, apply) => {

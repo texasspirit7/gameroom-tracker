@@ -54,12 +54,20 @@ const dashboard = async () =>
 const weekFor = (trend, monday) => trend.find((w) => w.period === iso(monday));
 
 describe('the weekly profit trend', () => {
-  test('returns a fixed twelve-week window, oldest first', async () => {
+  test('runs oldest first and ends with the current week', async () => {
     const { weeklyTrend } = await dashboard();
-    assert.equal(weeklyTrend.length, 12);
     const periods = weeklyTrend.map((w) => w.period);
     assert.deepEqual(periods, [...periods].sort(), 'oldest first');
     assert.equal(periods[periods.length - 1], iso(THIS_MONDAY), 'ends with the current week');
+    assert.ok(weeklyTrend.length <= 12, 'never longer than the twelve-week lookback');
+  });
+
+  // Weeks before anything was recorded are empty by definition; a flat run-up into the first
+  // sheet reads as a slump rather than as "no data yet".
+  test('never starts earlier than the first thing on record', async () => {
+    const { weeklyTrend } = await dashboard();
+    assert.equal(weeklyTrend[0].period, iso(LAST_MONDAY), 'starts at the earliest sheet\u2019s week');
+    assert.equal(weeklyTrend.length, 2, 'last week and this week — not a padded twelve');
   });
 
   test('every bucket starts on a Monday', async () => {
@@ -76,10 +84,22 @@ describe('the weekly profit trend', () => {
     assert.equal(weekFor(weeklyTrend, LAST_MONDAY).net_profit, 800);
   });
 
-  test('weeks with no sheets are present as zero, not omitted', async () => {
+  test('a quiet week between two active ones still appears as zero', async () => {
+    // A sheet three weeks back leaves a genuine gap in the middle, which must stay visible.
+    const gapWeek = addDays(THIS_MONDAY, -21);
+    const form = new FormData();
+    form.append('file', new Blob([buildSheetXlsx(300)]), 'sheet.xlsx');
+    form.append('sheet_date', iso(gapWeek));
+    assert.equal((await fetch(`${ctx.baseUrl}/api/sheets/upload`, {
+      method: 'POST', headers: { Cookie: cookie }, body: form,
+    })).status, 200);
+
     const { weeklyTrend } = await dashboard();
-    const empty = weeklyTrend.filter((w) => w.net_profit === 0 && w.expenses === 0);
-    assert.ok(empty.length >= 9, 'the quiet weeks still appear so the gap is visible');
+    assert.equal(weeklyTrend.length, 4, 'three weeks back through this one');
+    assert.equal(weeklyTrend[0].period, iso(gapWeek), 'window now reaches the older sheet');
+    const middle = weeklyTrend[1];
+    assert.equal(middle.net_profit, 0, 'the empty week in the middle is kept, not closed up');
+    assert.equal(middle.expenses, 0);
   });
 
   test('carries only what the chart plots — net profit and expenses', async () => {
@@ -93,7 +113,8 @@ describe('the weekly profit trend', () => {
       `${ctx.baseUrl}/api/dashboard?from=${iso(THIS_MONDAY)}&to=${iso(THIS_MONDAY)}`,
       { headers: { Cookie: cookie } },
     )).json();
-    assert.equal(narrow.weeklyTrend.length, 12, 'still twelve weeks');
+    const { weeklyTrend: full } = await dashboard();
+    assert.equal(narrow.weeklyTrend.length, full.length, 'the weekly window is unchanged by the range');
     assert.equal(narrow.buckets.length, 1, 'while the range-driven buckets narrow to the one day');
   });
 
