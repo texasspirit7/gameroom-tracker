@@ -763,3 +763,30 @@ input[type="date"] { color-scheme: dark; }
 @media (max-width: 720px) {
   .receipt-form label.grow { flex-basis: 100%; }
 }
+
+
+/* ---- Activity trail ------------------------------------------------------------------ */
+
+/* The two areas that matter — access and money — carry a red edge so they read as different
+   in kind from routine sheet work, not merely more recent. */
+.activity-list li.sensitive {
+  border-left: 3px solid var(--bad);
+  padding-left: 10px;
+  background: rgba(255, 107, 107, 0.05);
+}
+.activity-list li.sensitive .activity-head strong { color: var(--bad); }
+
+.panel-alert { border-color: rgba(255, 107, 107, 0.35); }
+.panel-alert > h2::before { background: var(--bad); }
+
+.activity-head { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+.activity-detail { font-size: 12px; color: var(--ink-2); margin-top: 2px; }
+.activity-meta { font-size: 11px; margin-top: 2px; }
+
+/* Long enough to scan, short enough not to own the page. */
+.activity-full { max-height: 620px; overflow-y: auto; }
+
+.activity-filters {
+  display: flex; gap: 8px; flex-wrap: wrap; margin: 0 0 14px;
+}
+.activity-filters button { font-size: 12px; padding: 5px 11px; }

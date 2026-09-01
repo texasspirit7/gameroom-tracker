@@ -1,15 +1,16 @@
 import { after, before, describe, test } from 'node:test';
 import assert from 'node:assert/strict';
-import { startTestServer, signInAsAdmin, signInAsApprovedUser } from './helpers/testServer.js';
+import { startTestServer, signInAsAdmin, signInAsApprovedUser, signInAsOwner } from './helpers/testServer.js';
 
 // One shared server for the whole file — Node caches ES modules per process, so a second
 // startTestServer() here would reuse (and after teardown, find closed) the same db singleton.
 //
 // How receipts feed the weekly split is covered in profitSplitWeekly.test.js; this file is
 // about the ledger itself — validation, access, deletion and the audit trail.
-let ctx, adminCookie, userCookie;
+let ctx, adminCookie, userCookie, ownerCookie;
 before(async () => {
   ctx = await startTestServer();
+  ownerCookie = await signInAsOwner(ctx.baseUrl);
   adminCookie = await signInAsAdmin(ctx.baseUrl);
   userCookie = await signInAsApprovedUser(ctx.baseUrl, adminCookie);
 });
@@ -112,7 +113,7 @@ describe('receipts — audit trail', () => {
     const created = await (await addReceipt({ received_on: '2026-09-11', amount: 77 })).json();
     await fetch(`${ctx.baseUrl}/api/profit-split/receipts/${created.id}`, { method: 'DELETE', headers: { Cookie: adminCookie } });
 
-    const log = await (await fetch(`${ctx.baseUrl}/api/audit?limit=50`, { headers: { Cookie: adminCookie } })).json();
+    const log = await (await fetch(`${ctx.baseUrl}/api/audit?limit=50`, { headers: { Cookie: ownerCookie } })).json();
     const actions = log.map((e) => e.action);
     assert.ok(actions.includes('receipt-added'), 'expected a receipt-added entry');
     assert.ok(actions.includes('receipt-deleted'), 'expected a receipt-deleted entry');

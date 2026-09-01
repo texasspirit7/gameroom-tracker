@@ -90,11 +90,14 @@ export function AuthProvider({ children }) {
   }, [authEnabled, user]);
 
   const isAdmin = user?.role === 'admin';
+  // Owning the activity trail is narrower than being an admin — the trail records what
+  // admins do to each other's accounts, so it isn't visible to them generally.
+  const isOwner = Boolean(user?.isOwner);
 
   return (
     <AuthContext.Provider value={{
       loading, authEnabled, authProvider, googleClientId, user, error,
-      login, loginWithGoogle, logout, isAdmin, refresh,
+      login, loginWithGoogle, logout, isAdmin, isOwner, refresh,
     }}>
       {children}
     </AuthContext.Provider>

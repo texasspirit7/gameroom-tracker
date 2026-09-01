@@ -5,6 +5,7 @@ import {
   publicUser, requireAuth, requireApproved, requireAdmin,
 } from '../auth.js';
 import { db } from '../db.js';
+import { logAudit } from './audit.js';
 
 export const authRouter = Router();
 export const adminRouter = Router();
@@ -21,6 +22,10 @@ authRouter.post('/google', async (req, res) => {
     const user = findOrCreateUser(profile);
     if (user.status === 'blocked') return res.status(403).json({ error: 'Account blocked' });
     issueSession(res, user);
+    // req.user isn't populated on the sign-in request itself — the session is only just being
+    // issued — so it's set here for the trail to pick up.
+    req.user = user;
+    logAudit(req, { action: 'signed-in', detail: 'Signed in via Google' });
     res.json({ user: publicUser(user) });
   } catch (err) {
     console.error('[auth/google]', err);
@@ -35,6 +40,10 @@ authRouter.post('/local', (req, res) => {
     const user = findOrCreateUser(profile);
     if (user.status === 'blocked') return res.status(403).json({ error: 'Account blocked' });
     issueSession(res, user);
+    // req.user isn't populated on the sign-in request itself — the session is only just being
+    // issued — so it's set here for the trail to pick up.
+    req.user = user;
+    logAudit(req, { action: 'signed-in', detail: 'Signed in via local sign-in' });
     res.json({ user: publicUser(user) });
   } catch (err) {
     res.status(400).json({ error: err.message || 'Sign-in failed' });
@@ -59,18 +68,23 @@ adminRouter.get('/users', requireAdmin, (req, res) => {
 });
 
 adminRouter.post('/users/:id/approve', requireAdmin, (req, res) => {
+  const id = Number(req.params.id);
+  const target = db.prepare('SELECT email FROM users WHERE id = ?').get(id);
   const result = db.prepare(
     "UPDATE users SET status = 'approved', approved_at = datetime('now'), approved_by = ? WHERE id = ?"
-  ).run(req.user.email, Number(req.params.id));
+  ).run(req.user.email, id);
   if (!result.changes) return res.status(404).json({ error: 'User not found' });
+  logAudit(req, { action: 'user-approved', detail: `Approved ${target?.email ?? `user #${id}`}` });
   res.json({ ok: true });
 });
 
 adminRouter.post('/users/:id/block', requireAdmin, (req, res) => {
   const id = Number(req.params.id);
   if (id === req.user.id) return res.status(400).json({ error: "You can't block your own account" });
+  const target = db.prepare('SELECT email FROM users WHERE id = ?').get(id);
   const result = db.prepare("UPDATE users SET status = 'blocked' WHERE id = ?").run(id);
   if (!result.changes) return res.status(404).json({ error: 'User not found' });
+  logAudit(req, { action: 'user-blocked', detail: `Blocked ${target?.email ?? `user #${id}`}` });
   res.json({ ok: true });
 });
 
@@ -79,7 +93,12 @@ adminRouter.post('/users/:id/role', requireAdmin, (req, res) => {
   const role = req.body?.role;
   if (!['admin', 'user'].includes(role)) return res.status(400).json({ error: "role must be 'admin' or 'user'" });
   if (id === req.user.id && role === 'user') return res.status(400).json({ error: "You can't demote your own account" });
+  const target = db.prepare('SELECT email, role FROM users WHERE id = ?').get(id);
   const result = db.prepare('UPDATE users SET role = ? WHERE id = ?').run(role, id);
   if (!result.changes) return res.status(404).json({ error: 'User not found' });
+  logAudit(req, {
+    action: 'user-role-changed',
+    detail: `${target?.email ?? `user #${id}`}: ${target?.role ?? '?'} → ${role}`,
+  });
   res.json({ ok: true });
 });

@@ -22,6 +22,12 @@ export const config = {
   port: Number(process.env.PORT) || 3003,
   dataDir: path.resolve(__dirname, '..', process.env.DATA_DIR || './data'),
   googleClientId: process.env.GOOGLE_CLIENT_ID || '',
+  /**
+   * The single account allowed to see the Activity trail. Kept apart from adminEmails: that
+   * seeds who may administer, this governs who may read the record of what everyone did.
+   */
+  ownerEmail: (process.env.OWNER_EMAIL || 'texasspirit7@gmail.com').trim().toLowerCase(),
+
   adminEmails: (process.env.ADMIN_EMAILS || '')
     .split(',')
     .map((e) => e.trim().toLowerCase())

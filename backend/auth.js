@@ -97,7 +97,10 @@ export function clearSession(res) {
 
 export function publicUser(user) {
   const { id, email, name, picture, role, status } = user;
-  return { id, email, name, picture, role, status };
+  // A flag rather than the owner's address: the client needs to know whether *this* account
+  // owns the trail, not who does.
+  const isOwner = !config.authEnabled || (email || '').toLowerCase() === config.ownerEmail;
+  return { id, email, name, picture, role, status, isOwner };
 }
 
 export function requireAuth(req, res, next) {
@@ -137,6 +140,17 @@ export function requireAdmin(req, res, next) {
 }
 
 /** Gate for delete/modify routes: enforces admin-only when auth is on, passes through when it's off. */
+/**
+ * The Activity trail is the record of what everyone did, including admins acting on each
+ * other's accounts — so it is restricted to the owner rather than to admins generally.
+ */
+export function ownerGate(req, res, next) {
+  if (!config.authEnabled) return next();
+  const email = (req.user?.email || '').toLowerCase();
+  if (email && email === config.ownerEmail) return next();
+  return res.status(403).json({ error: 'This page is limited to the account owner.' });
+}
+
 export function adminGate(req, res, next) {
   if (!config.authEnabled) return next();
   return requireAdmin(req, res, next);

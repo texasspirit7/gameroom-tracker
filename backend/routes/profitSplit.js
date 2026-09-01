@@ -307,5 +307,9 @@ profitSplitRouter.patch('/:period', adminGate, (req, res) => {
     ON CONFLICT(period) DO UPDATE SET notes = excluded.notes
   `).run(period, notes);
 
+  logAudit(req, {
+    action: 'split-comment',
+    detail: `Comment on ${period === CLOSED_PERIOD_KEY ? 'the closed period' : `week of ${period}`}`,
+  });
   res.json({ ok: true, period, notes });
 });

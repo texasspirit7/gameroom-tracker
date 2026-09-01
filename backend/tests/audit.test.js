@@ -1,7 +1,7 @@
 import { after, before, describe, test } from 'node:test';
 import assert from 'node:assert/strict';
 import xlsx from 'xlsx';
-import { startTestServer, signInAsAdmin } from './helpers/testServer.js';
+import { startTestServer, signInAsAdmin, signInAsOwner } from './helpers/testServer.js';
 
 function buildSheetXlsx() {
   const wb = xlsx.utils.book_new();
@@ -26,16 +26,17 @@ async function upload(baseUrl, cookie, sheetDate) {
 }
 
 describe('/api/audit — who did what to a sheet, and when', () => {
-  let ctx, cookie;
+  let ctx, cookie, ownerCookie;
   before(async () => {
     ctx = await startTestServer();
+  ownerCookie = await signInAsOwner(ctx.baseUrl);
     cookie = await signInAsAdmin(ctx.baseUrl);
   });
   after(async () => { await ctx.stop(); });
 
   test('uploading a sheet logs a "created" entry with the actor and sheet date', async () => {
     const { sheetId } = await upload(ctx.baseUrl, cookie, '2026-11-01');
-    const log = await (await fetch(`${ctx.baseUrl}/api/audit`, { headers: { Cookie: cookie } })).json();
+    const log = await (await fetch(`${ctx.baseUrl}/api/audit`, { headers: { Cookie: ownerCookie } })).json();
     const entry = log.find((e) => e.sheet_id === sheetId && e.action === 'created');
     assert.ok(entry, 'expected a created entry for the new sheet');
     assert.equal(entry.sheet_date, '2026-11-01');
@@ -48,7 +49,7 @@ describe('/api/audit — who did what to a sheet, and when', () => {
       method: 'PATCH', headers: { Cookie: cookie, 'Content-Type': 'application/json' },
       body: JSON.stringify({ cash_profit: -20 }),
     });
-    const log = await (await fetch(`${ctx.baseUrl}/api/audit`, { headers: { Cookie: cookie } })).json();
+    const log = await (await fetch(`${ctx.baseUrl}/api/audit`, { headers: { Cookie: ownerCookie } })).json();
     const entry = log.find((e) => e.sheet_id === sheetId && e.action === 'edited');
     assert.ok(entry, 'expected an edited entry');
     assert.match(entry.detail, /cash_profit/);
@@ -57,7 +58,7 @@ describe('/api/audit — who did what to a sheet, and when', () => {
   test('verifying a sheet logs a "verified" entry', async () => {
     const { sheetId } = await upload(ctx.baseUrl, cookie, '2026-11-03');
     await fetch(`${ctx.baseUrl}/api/sheets/${sheetId}/verify`, { method: 'POST', headers: { Cookie: cookie } });
-    const log = await (await fetch(`${ctx.baseUrl}/api/audit`, { headers: { Cookie: cookie } })).json();
+    const log = await (await fetch(`${ctx.baseUrl}/api/audit`, { headers: { Cookie: ownerCookie } })).json();
     const entry = log.find((e) => e.sheet_id === sheetId && e.action === 'verified');
     assert.ok(entry, 'expected a verified entry');
   });
@@ -69,14 +70,14 @@ describe('/api/audit — who did what to a sheet, and when', () => {
     const sheetRes = await fetch(`${ctx.baseUrl}/api/sheets/${sheetId}`, { headers: { Cookie: cookie } });
     assert.equal(sheetRes.status, 404, 'the sheet itself should be gone');
 
-    const log = await (await fetch(`${ctx.baseUrl}/api/audit`, { headers: { Cookie: cookie } })).json();
+    const log = await (await fetch(`${ctx.baseUrl}/api/audit`, { headers: { Cookie: ownerCookie } })).json();
     const entry = log.find((e) => e.sheet_id === sheetId && e.action === 'deleted');
     assert.ok(entry, 'expected a deleted entry to remain even though the sheet row is gone');
     assert.equal(entry.sheet_date, '2026-11-04');
   });
 
   test('limit query param caps how many entries come back', async () => {
-    const res = await fetch(`${ctx.baseUrl}/api/audit?limit=2`, { headers: { Cookie: cookie } });
+    const res = await fetch(`${ctx.baseUrl}/api/audit?limit=2`, { headers: { Cookie: ownerCookie } });
     const log = await res.json();
     assert.equal(log.length, 2);
   });

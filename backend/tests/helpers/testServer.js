@@ -14,7 +14,10 @@ export async function startTestServer() {
   process.env.AUTH_PROVIDER = 'local';
   process.env.GOOGLE_CLIENT_ID = '';
   process.env.ANTHROPIC_API_KEY = '';
-  process.env.ADMIN_EMAILS = 'admin@test.local';
+  process.env.ADMIN_EMAILS = 'admin@test.local,owner@test.local';
+  // The Activity trail is owner-only, and the owner is deliberately NOT the ordinary
+  // test admin — that keeps the two boundaries distinguishable in tests.
+  process.env.OWNER_EMAIL = 'owner@test.local';
   process.env.JWT_SECRET = 'test-only-secret';
   process.env.NODE_ENV = 'test';
 
@@ -72,5 +75,20 @@ export async function signInAsApprovedUser(baseUrl, adminCookie, email = 'user@t
     headers: { Cookie: adminCookie },
   });
 
+  return cookie;
+}
+
+/**
+ * Signs in the account that owns the Activity trail. Separate from signInAsAdmin so tests can
+ * tell the admin boundary and the owner boundary apart.
+ */
+export async function signInAsOwner(baseUrl) {
+  const res = await fetch(`${baseUrl}/api/auth/local`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ name: 'Test Owner', email: 'owner@test.local' }),
+  });
+  const cookie = res.headers.get('set-cookie')?.split(';')[0];
+  if (!cookie) throw new Error('Sign-in did not return a session cookie');
   return cookie;
 }

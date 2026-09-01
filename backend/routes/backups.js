@@ -1,4 +1,5 @@
 import { Router } from 'express';
+import { logAudit } from './audit.js';
 import fs from 'node:fs';
 import path from 'node:path';
 import { adminGate } from '../auth.js';
@@ -17,7 +18,9 @@ backupsRouter.get('/', (req, res) => {
 // POST /api/backups — take a snapshot now, outside the daily schedule
 backupsRouter.post('/', (req, res) => {
   try {
-    res.json({ ok: true, name: runBackup({ force: true }) });
+    const name = runBackup({ force: true });
+    logAudit(req, { action: 'backup-created', detail: name });
+    res.json({ ok: true, name });
   } catch (err) {
     console.error('[backup]', err);
     res.status(500).json({ error: 'Backup failed' });

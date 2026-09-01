@@ -1,5 +1,6 @@
 import { Router } from 'express';
 import { db } from '../db.js';
+import { logAudit } from './audit.js';
 import { adminGate } from '../auth.js';
 
 export const expensesRouter = Router();
@@ -41,6 +42,7 @@ expensesRouter.post('/', (req, res) => {
   const result = db.prepare(
     'INSERT INTO other_expenses (expense_date, category, amount, note, created_by) VALUES (?, ?, ?, ?, ?)'
   ).run(expense_date, String(category).trim(), amt, note || null, createdBy);
+  logAudit(req, { action: 'expense-added', detail: `${String(category).trim()} $${amt.toLocaleString()} on ${expense_date}` });
   res.json({ id: result.lastInsertRowid });
 });
 
@@ -60,12 +62,24 @@ expensesRouter.patch('/:id', adminGate, (req, res) => {
   };
   db.prepare('UPDATE other_expenses SET expense_date = ?, category = ?, amount = ?, note = ? WHERE id = ?')
     .run(next.expense_date, next.category, next.amount, next.note, id);
+  // Both sides recorded: an edited amount is only meaningful against what it used to be.
+  logAudit(req, {
+    action: 'expense-edited',
+    detail: `${existing.category} $${existing.amount.toLocaleString()} → ${next.category} $${next.amount.toLocaleString()}`,
+  });
   res.json({ ok: true });
 });
 
 // DELETE /api/expenses/:id (admin-only once auth is on) — only manually logged entries
 expensesRouter.delete('/:id', adminGate, (req, res) => {
-  const result = db.prepare('DELETE FROM other_expenses WHERE id = ?').run(Number(req.params.id));
+  const id = Number(req.params.id);
+  // Read before the delete — afterwards there is nothing left to describe.
+  const existing = db.prepare('SELECT * FROM other_expenses WHERE id = ?').get(id);
+  const result = db.prepare('DELETE FROM other_expenses WHERE id = ?').run(id);
   if (!result.changes) return res.status(404).json({ error: 'Expense not found (only manually logged entries can be deleted here)' });
+  logAudit(req, {
+    action: 'expense-deleted',
+    detail: `${existing.category} $${existing.amount.toLocaleString()} on ${existing.expense_date}`,
+  });
   res.json({ ok: true });
 });

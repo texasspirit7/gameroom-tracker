@@ -17,6 +17,7 @@ import Expenses from './pages/Expenses.jsx';
 import AdminUsers from './pages/AdminUsers.jsx';
 import ProfitSplit from './pages/ProfitSplit.jsx';
 import Analytics from './pages/Analytics.jsx';
+import Activity from './pages/Activity.jsx';
 
 const NAV = [
   { to: '/', label: 'Dashboard', icon: '📊', end: true },
@@ -27,10 +28,11 @@ const NAV = [
   { to: '/admin', label: 'Admin — Users', icon: '🛡️', adminOnly: true },
   { to: '/profit-split', label: 'Profit Split', icon: '🤝', adminOnly: true },
   { to: '/analytics', label: 'Analytics', icon: '🔍', adminOnly: true },
+  { to: '/activity', label: 'Activity', icon: '📜', ownerOnly: true },
 ];
 
 // The date range picker only affects data on these routes
-const DATE_RANGE_ROUTES = ['/', '/machines', '/expenses'];
+const DATE_RANGE_ROUTES = ['/', '/machines', '/expenses', '/activity'];
 
 function Topbar() {
   const { pathname } = useLocation();
@@ -97,6 +99,21 @@ function SidebarFooter() {
  * stuck spinners. The server is the real boundary (these endpoints already 403); this just
  * makes the refusal a clean, honest screen instead of a broken-looking one.
  */
+function OwnerOnly({ children }) {
+  const { isOwner, authEnabled } = useAuth();
+  if (!authEnabled || isOwner) return children;
+  return (
+    <div className="panel" style={{ textAlign: 'center', padding: '48px 24px' }}>
+      <div style={{ fontSize: 34, marginBottom: 12 }}>📜</div>
+      <h2 style={{ justifyContent: 'center' }}>Owner access required</h2>
+      <p className="muted" style={{ maxWidth: '46ch', margin: '0 auto 20px' }}>
+        The activity trail records what every account has done, admins included, so it is
+        limited to the account owner.
+      </p>
+    </div>
+  );
+}
+
 function AdminOnly({ children }) {
   const { isAdmin, authEnabled } = useAuth();
   if (!authEnabled || isAdmin) return children;
@@ -115,8 +132,9 @@ function AdminOnly({ children }) {
 function AppShell() {
   const [navOpen, setNavOpen] = useState(false);
   const { pathname } = useLocation();
-  const { isAdmin, authEnabled } = useAuth();
+  const { isAdmin, isOwner, authEnabled } = useAuth();
   const showAdminOnly = !authEnabled || isAdmin;
+  const showOwnerOnly = !authEnabled || isOwner;
 
   // Close the mobile drawer whenever the route changes
   useEffect(() => { setNavOpen(false); }, [pathname]);
@@ -144,7 +162,7 @@ function AppShell() {
           <button className="sidebar-close" aria-label="Close menu" onClick={() => setNavOpen(false)}>✕</button>
         </div>
         <nav>
-          {NAV.filter((item) => !item.adminOnly || showAdminOnly).map((item) => (
+          {NAV.filter((item) => (!item.adminOnly || showAdminOnly) && (!item.ownerOnly || showOwnerOnly)).map((item) => (
             <NavLink key={item.to} to={item.to} end={item.end}>
               <span className="nav-icon">{item.icon}</span>
               {item.label}
@@ -168,6 +186,7 @@ function AppShell() {
           <Route path="/admin" element={<AdminOnly><AdminUsers /></AdminOnly>} />
           <Route path="/profit-split" element={<AdminOnly><ProfitSplit /></AdminOnly>} />
           <Route path="/analytics" element={<AdminOnly><Analytics /></AdminOnly>} />
+          <Route path="/activity" element={<OwnerOnly><Activity /></OwnerOnly>} />
         </Routes>
       </main>
     </div>

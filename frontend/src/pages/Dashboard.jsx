@@ -1,4 +1,4 @@
-import { useEffect, useLayoutEffect, useRef, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import {
   ResponsiveContainer, LineChart, Line, BarChart, Bar, XAxis, YAxis,
@@ -7,21 +7,15 @@ import {
 import { api, fmt, signedMoney } from '../api.js';
 import { CHART, axisProps, tooltipProps } from '../chartTheme.js';
 import { useDateRange } from '../DateRangeContext.jsx';
-import { useAuth } from '../AuthContext.jsx';
 import CabinetCard, { netBounds } from '../components/CabinetCard.jsx';
 
 const weekday = (iso) => new Date(`${iso}T00:00:00Z`).toLocaleDateString('en-US', { weekday: 'short', timeZone: 'UTC' });
 
 export default function Dashboard() {
   const { from, to, label, preset } = useDateRange();
-  const { isAdmin, authEnabled } = useAuth();
-  const canModify = !authEnabled || isAdmin;
   const navigate = useNavigate();
   const [data, setData] = useState(null);
   const [error, setError] = useState(null);
-  const [audit, setAudit] = useState(null);
-  const [activityMaxH, setActivityMaxH] = useState(null);
-  const activityRef = useRef(null);
 
   useEffect(() => {
     setData(null);
@@ -31,37 +25,13 @@ export default function Dashboard() {
     api.dashboard(params).then(setData).catch((e) => setError(e.message));
   }, [from, to, label, preset]);
 
-  // Pulled deeper than what's visible — the list shows ACTIVITY_VISIBLE rows and scrolls for the rest.
-  useEffect(() => { api.auditLog(50).then(setAudit).catch(() => setAudit([])); }, []);
 
-  // Cap the activity list at exactly ACTIVITY_VISIBLE rows. Measured rather than a fixed
-  // pixel height because rows are variable — an entry with a `detail` line is taller than one
-  // without. offsetTop is used (not getBoundingClientRect) so re-measuring stays correct even
-  // when the list is already scrolled.
-  //
-  // `data` is a dependency as well as `audit`: the activity list only exists in the DOM once
-  // the dashboard body renders, and /api/audit (a small LIMIT query) normally resolves before
-  // /api/dashboard (many aggregations). Keyed on `audit` alone, the effect fired while the ref
-  // was still null and never ran again once the list mounted, so the list rendered uncapped.
-  useLayoutEffect(() => {
-    const el = activityRef.current;
-    if (!el) return undefined;
-    const measure = () => {
-      const items = el.children;
-      if (items.length <= ACTIVITY_VISIBLE) { setActivityMaxH(null); return; }
-      const last = items[ACTIVITY_VISIBLE - 1];
-      setActivityMaxH(last.offsetTop + last.offsetHeight - items[0].offsetTop);
-    };
-    measure();
-    window.addEventListener('resize', measure);
-    return () => window.removeEventListener('resize', measure);
-  }, [audit, data]);
 
   if (error) return <div className="error-box">{error}</div>;
   if (!data) return <p className="muted"><span className="spinner" />Loading dashboard…</p>;
 
   const {
-    totals, previous, buckets, alerts, expenses, otherExpensesTotal, deadMachines,
+    totals, previous, buckets, alerts, expenses, otherExpensesTotal,
     recentSheets = [], topMachines = [], range, chartGranularity, latestDate, weeklyTrend = [],
   } = data;
   const hasData = totals.sheet_count > 0;
@@ -250,142 +220,14 @@ export default function Dashboard() {
         </div>
       )}
 
-      {deadMachines.length > 0 && (
-        <div className="panel">
-          <h2>Machines with no play — {range.label}</h2>
-          {/* gap rather than per-link margin — a trailing margin on the last link overflowed
-              the panel and left it with a scrollbar. */}
-          <p style={{ fontSize: 13, display: 'flex', flexWrap: 'wrap', gap: 10, margin: 0 }}>
-            {deadMachines.map((n) => (
-              <Link key={n} to={`/machines/${n}`}>#{n}</Link>
-            ))}
-          </p>
-        </div>
-      )}
-
-      <div className="grid-2">
-        <div className="panel">
-          <h2>Export</h2>
-          <p className="muted" style={{ fontSize: 12, marginTop: 0 }}>
-            Downloads data for the current range ({range.label}) as CSV.
-          </p>
-          <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap' }}>
-            <a className="btn secondary" href={api.exportUrl('sheets', from, to)} download>Sheets CSV</a>
-            <a className="btn secondary" href={api.exportUrl('expenses', from, to)} download>Expenses CSV</a>
-            <a className="btn secondary" href={api.exportUrl('profit-split')} download>Profit Split CSV</a>
-          </div>
-
-          {canModify && <BackupsSection />}
-        </div>
-
-        <div className="panel">
-          <h2>
-            Recent Activity
-            {audit && audit.length > ACTIVITY_VISIBLE && (
-              <span className="panel-count">{audit.length} logged · scroll for more</span>
-            )}
-          </h2>
-          {!audit ? (
-            <p className="muted"><span className="spinner" />Loading…</p>
-          ) : audit.length === 0 ? (
-            <p className="muted" style={{ margin: 0 }}>No activity recorded yet.</p>
-          ) : (
-            <ul
-              className={`activity-list${activityMaxH ? ' scrollable' : ''}`}
-              ref={activityRef}
-              style={activityMaxH ? { maxHeight: activityMaxH } : undefined}
-            >
-              {audit.map((a) => (
-                <li key={a.id}>
-                  <strong>{ACTION_LABEL[a.action] || a.action}</strong>{' '}
-                  {a.action !== 'deleted' && a.sheet_id ? (
-                    <Link to={`/sheets/${a.sheet_id}`}>sheet {a.sheet_date}</Link>
-                  ) : (
-                    <>sheet {a.sheet_date}</>
-                  )}
-                  {' — '}{a.actor_name || a.actor_email || 'someone'}
-                  <span className="muted" style={{ fontSize: 11 }}> · {relativeTime(a.created_at)}</span>
-                  {a.detail && <div className="muted" style={{ fontSize: 11 }}>{a.detail}</div>}
-                </li>
-              ))}
-            </ul>
-          )}
-        </div>
-      </div>
     </>
   );
 }
 
 /** Admin-only: the nightly database snapshots, with an on-demand button and download links. */
-function BackupsSection() {
-  const [backups, setBackups] = useState(null);
-  const [busy, setBusy] = useState(false);
-  const [error, setError] = useState(null);
 
-  const load = () => api.backups().then(setBackups).catch((e) => setError(e.message));
-  useEffect(() => { load(); }, []);
 
-  const backUpNow = async () => {
-    setBusy(true);
-    setError(null);
-    try {
-      await api.createBackup();
-      await load();
-    } catch (e) {
-      setError(e.message);
-    } finally {
-      setBusy(false);
-    }
-  };
 
-  const latest = backups?.[0];
-
-  return (
-    <div style={{ marginTop: 18, borderTop: '1px solid var(--line)', paddingTop: 14 }}>
-      <div style={{ display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap' }}>
-        <strong style={{ fontSize: 13 }}>Database backups</strong>
-        <button className="secondary row-action" onClick={backUpNow} disabled={busy}>
-          {busy ? 'Backing up…' : 'Back up now'}
-        </button>
-      </div>
-      {error && <div className="error-box" style={{ marginTop: 10 }}>{error}</div>}
-      <p className="muted" style={{ fontSize: 12, margin: '8px 0 0' }}>
-        {!backups
-          ? 'Loading…'
-          : latest
-            ? <>Runs nightly, keeping the last 14. Latest: {new Date(latest.created_at).toLocaleString()} ({Math.round(latest.size / 1024)} KB).</>
-            : 'No snapshots yet — the first one is written shortly after the server starts.'}
-      </p>
-      {backups && backups.length > 0 && (
-        <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', marginTop: 8 }}>
-          {backups.slice(0, 3).map((b) => (
-            <a key={b.name} className="btn secondary row-action" href={api.backupUrl(b.name)} download>
-              {b.created_at.slice(0, 10)}
-            </a>
-          ))}
-        </div>
-      )}
-    </div>
-  );
-}
-
-const ACTION_LABEL = { created: 'Uploaded', edited: 'Edited', verified: 'Verified', deleted: 'Deleted' };
-
-/** How many activity rows stay visible before the list starts scrolling. */
-const ACTIVITY_VISIBLE = 4;
-
-// SQLite's datetime('now') stores UTC as "YYYY-MM-DD HH:MM:SS" with no timezone marker —
-// without an explicit "Z", Date() would parse it as local time and skew the diff.
-function relativeTime(sqliteUtc) {
-  const diffMs = Date.now() - new Date(`${sqliteUtc.replace(' ', 'T')}Z`).getTime();
-  const mins = Math.round(diffMs / 60000);
-  if (mins < 1) return 'just now';
-  if (mins < 60) return `${mins}m ago`;
-  const hours = Math.round(mins / 60);
-  if (hours < 24) return `${hours}h ago`;
-  const days = Math.round(hours / 24);
-  return `${days}d ago`;
-}
 
 /**
  * Rolls a figure up from zero once on load, and between values when the date range changes.

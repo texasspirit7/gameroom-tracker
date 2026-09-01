@@ -308,12 +308,6 @@ dashboardRouter.get('/', (req, res) => {
     .map(([category, amount]) => ({ category, amount }))
     .sort((a, b) => b.amount - a.amount);
 
-  const deadMachines = db.prepare(`
-    SELECT machine_number FROM machine_readings mr JOIN sheets s ON s.id = mr.sheet_id
-    WHERE s.sheet_date BETWEEN ? AND ?
-    GROUP BY machine_number HAVING SUM(mr.daily_in) = 0
-    ORDER BY machine_number
-  `).all(range.from, range.to).map((r) => r.machine_number);
 
   // The newest few sheets, for the dashboard's recent-sheets tiles. Built from the rows
   // aggregate() already fetched (ordered oldest-first) rather than re-querying.
@@ -358,7 +352,6 @@ dashboardRouter.get('/', (req, res) => {
     alerts,
     expenses,
     otherExpensesTotal: totals.other_expenses,
-    deadMachines,
     recentSheets,
     topMachines,
     latestDate,
