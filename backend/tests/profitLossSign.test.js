@@ -8,16 +8,17 @@ import { startTestServer, signInAsAdmin } from './helpers/testServer.js';
  * "Profit (Loss)" and "Short/Over" written exactly as `printedProfit` / `printedShort` —
  * strings so parenthesised accounting negatives can be exercised as they appear on paper.
  */
-function buildSheetXlsx({ totalIn, totalOut, printedProfit, printedShort }) {
+function buildSheetXlsx({ totalIn, totalOut, printedProfit, printedShort, dailyIn, pay }) {
   const wb = xlsx.utils.book_new();
   const rows = [
     ['#', 'Previous In', 'Current In', 'Daily In', 'Previous Out', 'Current Out', 'Daily Out', 'Hold'],
-    [1, 0, totalIn, totalIn, 0, totalOut, totalOut, '50%'],
+    [1, 0, totalIn, dailyIn ?? totalIn, 0, totalOut, totalOut, '50%'],
     ['Total', '', '', totalIn, '', '', totalOut, '50%'],
     [],
     ['Total Out', '$', totalOut, 'Total In', '$', totalIn, 'Bank'],
     ['Profit (Loss)', printedProfit],
     ['Short/Over', printedShort],
+    ...(pay === undefined ? [] : [['Pay', pay]]),
   ];
   xlsx.utils.book_append_sheet(wb, xlsx.utils.aoa_to_sheet(rows), 'Sheet1');
   return xlsx.write(wb, { type: 'buffer', bookType: 'xlsx' });
@@ -103,5 +104,35 @@ describe('the printed Profit (Loss) box is cross-checked against the machines', 
     });
     const s = await sheet(body.sheetId);
     assert.equal(s.meter_profit, 600, 'computed, with the printed box only raising a warning');
+  });
+});
+
+// Parentheses are the sheet's only marker for a negative, so every field read off the paper
+// has to honour them — not just the two Bank boxes that prompted the fix.
+describe('parentheses are honoured everywhere, not only in the Bank box', () => {
+  test('a parenthesised expense is a credit, not a charge', async () => {
+    const { body } = await upload('2026-06-01', {
+      totalIn: 1000, totalOut: 400, printedProfit: '600', printedShort: '0', pay: '(50)',
+    });
+    const s = await sheet(body.sheetId);
+    const payRow = s.expenses.find((e) => e.category === 'pay');
+    assert.ok(payRow, 'expected the pay row to be extracted');
+    assert.equal(payRow.amount, -50, '(50) on paper is a credit of 50');
+  });
+
+  test('an ordinary expense stays a positive charge', async () => {
+    const { body } = await upload('2026-06-02', {
+      totalIn: 1000, totalOut: 400, printedProfit: '600', printedShort: '0', pay: '300',
+    });
+    const s = await sheet(body.sheetId);
+    assert.equal(s.expenses.find((e) => e.category === 'pay').amount, 300);
+  });
+
+  test('a parenthesised machine reading is negative', async () => {
+    const { body } = await upload('2026-06-03', {
+      totalIn: 1000, totalOut: 400, printedProfit: '600', printedShort: '0', dailyIn: '(25)',
+    });
+    const s = await sheet(body.sheetId);
+    assert.equal(s.machines[0].daily_in, -25);
   });
 });
