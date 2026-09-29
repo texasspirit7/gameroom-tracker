@@ -120,10 +120,10 @@ export default function Dashboard() {
           {/* Says "last N" only when the window is genuinely the full lookback — once it's
               clamped to the first sheet on record, "last 9 weeks" would be misleading. */}
           <span className="panel-count">
-            {weeklyTrend.length >= 12 ? 'last 12 weeks' : `since ${weeklyTrend[0]?.label.split('–')[0] ?? 'the start'}`} · Mon–Sun
+            {weeklyTrend.length === 12 ? 'last 12 weeks' : `since ${weeklyTrend[0]?.label.split('–')[0] ?? 'the start'}`} · Mon–Sun
           </span>
         </h2>
-        {weeklyTrend.some((w) => w.net_profit || w.expenses) ? (
+        {weeklyTrend.some((w) => w.net_profit || w.expenses || w.total_in || w.total_out) ? (
           <ResponsiveContainer width="100%" height={280}>
             <LineChart data={weeklyTrend} margin={{ top: 6, right: 16, left: 0, bottom: 0 }}>
               <CartesianGrid strokeDasharray="3 3" stroke={CHART.grid} />
@@ -132,6 +132,8 @@ export default function Dashboard() {
               <Tooltip formatter={(v) => `$${fmt(v)}`} {...tooltipProps} />
               <Legend />
               <ReferenceLine y={0} stroke={CHART.zero} />
+              <Line type="monotone" dataKey="total_in" name="Total In" stroke={CHART.totalIn} strokeWidth={2} dot={{ r: 3 }} />
+              <Line type="monotone" dataKey="total_out" name="Total Out" stroke={CHART.totalOut} strokeWidth={2} dot={{ r: 3 }} />
               <Line type="monotone" dataKey="net_profit" name="Net Profit" stroke={CHART.netProfit} strokeWidth={2} dot={{ r: 3 }} />
               <Line type="monotone" dataKey="expenses" name="Expenses" stroke={CHART.expenses} strokeWidth={2} dot={{ r: 3 }} />
             </LineChart>
@@ -150,8 +152,8 @@ export default function Dashboard() {
               <Tooltip formatter={(v) => `$${fmt(v)}`} {...tooltipProps} />
               <Legend />
               <ReferenceLine y={0} stroke={CHART.zero} />
-              {/* Net profit and expenses only — in/out/match/meter crowded the axis and are
-                  already broken out in the panels below. */}
+              <Line type="monotone" dataKey="total_in" name="Total In" stroke={CHART.totalIn} strokeWidth={2} dot={{ r: 3 }} />
+              <Line type="monotone" dataKey="total_out" name="Total Out" stroke={CHART.totalOut} strokeWidth={2} dot={{ r: 3 }} />
               <Line type="monotone" dataKey="net_profit" name="Net Profit" stroke={CHART.netProfit} strokeWidth={2} dot={{ r: 3 }} />
               <Line type="monotone" dataKey="expenses" name="Expenses" stroke={CHART.expenses} strokeWidth={2} dot={{ r: 3 }} />
             </LineChart>

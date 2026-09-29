@@ -165,15 +165,22 @@ const WEEKLY_TREND_WEEKS = 12;
 export function buildWeeklyTrend() {
   // Nothing recorded at all — the chart says so rather than drawing a flat line through
   // twelve empty weeks.
-  const earliest = [
-    db.prepare('SELECT MIN(sheet_date) AS d FROM sheets').get().d,
-    db.prepare('SELECT MIN(expense_date) AS d FROM other_expenses').get().d,
-  ].filter(Boolean).sort()[0];
+  const dates = [
+    db.prepare('SELECT MIN(sheet_date) AS a, MAX(sheet_date) AS b FROM sheets').get(),
+    db.prepare('SELECT MIN(expense_date) AS a, MAX(expense_date) AS b FROM other_expenses').get(),
+  ];
+  const earliest = dates.map((d) => d.a).filter(Boolean).sort()[0];
+  const latest = dates.map((d) => d.b).filter(Boolean).sort().pop();
   if (!earliest) return [];
 
   const today = new Date().toISOString().slice(0, 10);
   const thisMonday = bucketKey(today, 'week');
-  const windowStart = addDays(thisMonday, -7 * (WEEKLY_TREND_WEEKS - 1));
+  const lookback = addDays(thisMonday, -7 * (WEEKLY_TREND_WEEKS - 1));
+  // Stretched back far enough to always include the most recent activity. Sheets arrive in
+  // batches, so a plain rolling window goes blank the moment the last batch is older than the
+  // lookback — showing nothing at all, rather than the gap, which is the useful part.
+  const latestWeek = bucketKey(latest, 'week');
+  const windowStart = latestWeek < lookback ? latestWeek : lookback;
   // Never reaches back past the first thing on record: weeks before anything existed are
   // empty by definition, and a flat run-up reads as a slump rather than as no data.
   const firstWeek = bucketKey(earliest, 'week');
@@ -181,7 +188,7 @@ export function buildWeeklyTrend() {
   const to = addDays(thisMonday, 6);
 
   const sheetRows = db.prepare(
-    'SELECT sheet_date, meter_profit FROM sheets WHERE sheet_date BETWEEN ? AND ?'
+    'SELECT sheet_date, meter_profit, total_in, total_out FROM sheets WHERE sheet_date BETWEEN ? AND ?'
   ).all(from, to);
   const sheetExpenses = db.prepare(`
     SELECT s.sheet_date AS d, SUM(e.amount) AS amount FROM expenses e
@@ -195,19 +202,28 @@ export function buildWeeklyTrend() {
   // middle should read as zero rather than closing the gap and flattering the trend.
   const weeks = new Map();
   for (let key = from; key <= thisMonday; key = addDays(key, 7)) {
-    weeks.set(key, { period: key, label: bucketLabel(key, 'week'), meter_profit: 0, expenses: 0 });
+    weeks.set(key, {
+      period: key, label: bucketLabel(key, 'week'),
+      meter_profit: 0, expenses: 0, total_in: 0, total_out: 0,
+    });
   }
   const into = (date, apply) => {
     const w = weeks.get(bucketKey(date, 'week'));
     if (w) apply(w);
   };
-  for (const r of sheetRows) into(r.sheet_date, (w) => { w.meter_profit += r.meter_profit || 0; });
+  for (const r of sheetRows) into(r.sheet_date, (w) => {
+    w.meter_profit += r.meter_profit || 0;
+    w.total_in += r.total_in || 0;
+    w.total_out += r.total_out || 0;
+  });
   for (const r of sheetExpenses) into(r.d, (w) => { w.expenses += r.amount || 0; });
   for (const r of otherExpenses) into(r.d, (w) => { w.expenses += r.amount || 0; });
 
   return [...weeks.values()].map((w) => ({
     period: w.period,
     label: w.label,
+    total_in: w.total_in,
+    total_out: w.total_out,
     expenses: w.expenses,
     net_profit: w.meter_profit - w.expenses,
   }));

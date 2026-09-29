@@ -102,9 +102,28 @@ describe('the weekly profit trend', () => {
     assert.equal(middle.expenses, 0);
   });
 
-  test('carries only what the chart plots — net profit and expenses', async () => {
+  test('carries only what the chart plots', async () => {
     const { weeklyTrend } = await dashboard();
-    assert.deepEqual(Object.keys(weeklyTrend[0]).sort(), ['expenses', 'label', 'net_profit', 'period']);
+    assert.deepEqual(Object.keys(weeklyTrend[0]).sort(),
+      ['expenses', 'label', 'net_profit', 'period', 'total_in', 'total_out']);
+  });
+
+  test('money in and out are summed per week alongside the profit', async () => {
+    const { weeklyTrend } = await dashboard();
+    // The fixture uploads sheets with totalOut 0, so in is the whole of the activity.
+    const thisWeek = weekFor(weeklyTrend, THIS_MONDAY);
+    assert.equal(thisWeek.total_in, 1500, '1000 on Monday + 500 on Tuesday');
+    assert.equal(thisWeek.total_out, 0);
+    assert.equal(weekFor(weeklyTrend, LAST_MONDAY).total_in, 800);
+  });
+
+  test('a week with no sheets reports zero in and out, not undefined', async () => {
+    const { weeklyTrend } = await dashboard();
+    const empty = weeklyTrend.find((w) => w.total_in === 0 && w.net_profit === 0);
+    if (empty) {
+      assert.equal(empty.total_out, 0);
+      assert.equal(typeof empty.total_in, 'number');
+    }
   });
 
   // The default range is a single week; a range-driven weekly chart would be one point.
@@ -127,5 +146,37 @@ describe('the weekly profit trend', () => {
     const wk = weekFor(weeklyTrend, THIS_MONDAY);
     assert.equal(wk.expenses, 200);
     assert.equal(wk.net_profit, 1300, 'net profit drops by the expense');
+  });
+});
+
+describe('a stale record set still renders', () => {
+  // A plain rolling window goes blank once the last batch of sheets is older than the
+  // lookback — which is exactly when you most want to see when activity stopped.
+  test('stale data is still shown rather than the chart going blank', async () => {
+    const stale = new Date(addDays(THIS_MONDAY, -7 * 20)); // 20 weeks back, well past the lookback
+    const form = new FormData();
+    form.append('file', new Blob([buildSheetXlsx(700)]), 'sheet.xlsx');
+    form.append('sheet_date', iso(stale));
+    assert.equal((await fetch(`${ctx.baseUrl}/api/sheets/upload`, {
+      method: 'POST', headers: { Cookie: cookie }, body: form,
+    })).status, 200);
+
+    // Everything recent has to go, sheets and manual expenses alike — either would count as
+    // activity and keep the window where it is.
+    const sheets = await (await fetch(`${ctx.baseUrl}/api/sheets`, { headers: { Cookie: cookie } })).json();
+    for (const sh of sheets.filter((r) => r.sheet_date !== iso(stale))) {
+      await fetch(`${ctx.baseUrl}/api/sheets/${sh.id}`, { method: 'DELETE', headers: { Cookie: cookie } });
+    }
+    const { expenses } = await (await fetch(`${ctx.baseUrl}/api/expenses`, { headers: { Cookie: cookie } })).json();
+    // Only manually logged ones are deletable here; a sheet's own went with the sheet.
+    for (const e of expenses.filter((x) => x.source === 'other')) {
+      await fetch(`${ctx.baseUrl}/api/expenses/${e.id}`, { method: 'DELETE', headers: { Cookie: cookie } });
+    }
+
+    const { weeklyTrend } = await dashboard();
+    assert.ok(weeklyTrend.length > 12, 'the window stretches to reach the old data');
+    assert.equal(weeklyTrend[0].period, iso(mondayOf(stale)), 'it starts at the stale week');
+    assert.equal(weeklyTrend[0].net_profit, 700, 'and the figures are there');
+    assert.equal(weeklyTrend[weeklyTrend.length - 1].period, iso(THIS_MONDAY), 'still ending at this week');
   });
 });
