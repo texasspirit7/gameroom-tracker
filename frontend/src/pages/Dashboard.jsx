@@ -161,44 +161,25 @@ export default function Dashboard() {
         ) : <p className="muted">No data in this range.</p>}
       </div>
 
-      <div className="grid-2">
-        <div className="panel">
-          <h2>In vs out by {chartNoun}</h2>
-          {hasData ? (
-            <ResponsiveContainer width="100%" height={240}>
-              <BarChart data={buckets}>
-                <CartesianGrid strokeDasharray="3 3" stroke={CHART.grid} />
-                <XAxis dataKey="label" {...axisProps} />
-                <YAxis {...axisProps} />
-                <Tooltip formatter={(v) => `$${fmt(v)}`} {...tooltipProps} />
-                <Legend />
-                <Bar dataKey="total_in" name="In" fill={CHART.in} radius={[3, 3, 0, 0]} />
-                <Bar dataKey="total_out" name="Out" fill={CHART.out} radius={[3, 3, 0, 0]} />
-              </BarChart>
-            </ResponsiveContainer>
-          ) : <p className="muted">No data yet.</p>}
-        </div>
-
-        <div className="panel">
-          <h2>Expenses — {range.label} <span className="muted" style={{ fontWeight: 400, fontSize: 12 }}>(sheet + <Link to="/expenses">manual</Link>)</span></h2>
-          {expenses.length ? (
-            <ResponsiveContainer width="100%" height={240}>
-              <BarChart data={expenses} layout="vertical" margin={{ left: 20 }}>
-                <XAxis type="number" {...axisProps} />
-                <YAxis type="category" dataKey="category" width={80} {...axisProps} />
-                <Tooltip formatter={(v) => `$${fmt(v)}`} {...tooltipProps} />
-                <Bar dataKey="amount" fill={CHART.expenses} radius={[0, 3, 3, 0]}>
-                  {expenses.map((e, i) => <Cell key={i} fill={i % 2 ? CHART.accent : CHART.expenses} />)}
-                </Bar>
-              </BarChart>
-            </ResponsiveContainer>
-          ) : <p className="muted">No expenses recorded in this range.</p>}
-          <p className="muted" style={{ fontSize: 12 }}>
-            Meter Profit doesn't subtract any expenses. Net Profit (After Overhead) subtracts all of
-            them — sheet expenses (pay, family dollar, supplies) plus whatever you log manually on the
-            {' '}<Link to="/expenses">Expenses</Link> page (${fmt(otherExpensesTotal)}).
-          </p>
-        </div>
+      <div className="panel">
+        <h2>Expenses — {range.label} <span className="muted" style={{ fontWeight: 400, fontSize: 12 }}>(sheet + <Link to="/expenses">manual</Link>)</span></h2>
+        {expenses.length ? (
+          <ResponsiveContainer width="100%" height={240}>
+            <BarChart data={expenses} layout="vertical" margin={{ left: 20 }}>
+              <XAxis type="number" {...axisProps} />
+              <YAxis type="category" dataKey="category" width={80} {...axisProps} />
+              <Tooltip formatter={(v) => `$${fmt(v)}`} {...tooltipProps} />
+              <Bar dataKey="amount" fill={CHART.expenses} radius={[0, 3, 3, 0]}>
+                {expenses.map((e, i) => <Cell key={i} fill={i % 2 ? CHART.accent : CHART.expenses} />)}
+              </Bar>
+            </BarChart>
+          </ResponsiveContainer>
+        ) : <p className="muted">No expenses recorded in this range.</p>}
+        <p className="muted" style={{ fontSize: 12 }}>
+          Meter Profit doesn't subtract any expenses. Net Profit (After Overhead) subtracts all of
+          them — sheet expenses (pay, family dollar, supplies) plus whatever you log manually on the
+          {' '}<Link to="/expenses">Expenses</Link> page (${fmt(otherExpensesTotal)}).
+        </p>
       </div>
 
       {topMachines.length > 0 && (
