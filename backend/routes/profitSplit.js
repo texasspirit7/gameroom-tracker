@@ -295,6 +295,77 @@ profitSplitRouter.delete('/receipts/:id', adminGate, (req, res) => {
   return res.json({ ok: true, id: row.id });
 });
 
+const NOTE_MAX = 2000;
+
+/** Shown in the trail when a note changes — enough to recognise which note, not the essay. */
+const snippet = (body) => {
+  const flat = String(body).replace(/\s+/g, ' ').trim();
+  return flat.length > 60 ? `${flat.slice(0, 60)}…` : flat;
+};
+
+function readNoteBody(body, existing = null) {
+  const noteDate = body?.note_date === undefined ? existing?.note_date : String(body.note_date);
+  if (!noteDate || !DATE_RE.test(noteDate)) return { error: 'Note date must be YYYY-MM-DD' };
+
+  const text = body?.body === undefined ? existing?.body : String(body.body);
+  if (!text || !text.trim()) return { error: 'A note needs some text' };
+
+  return { noteDate, body: text.trim().slice(0, NOTE_MAX) };
+}
+
+/** GET /api/profit-split/notes — dated notes, newest first. */
+profitSplitRouter.get('/notes', adminGate, (req, res) => {
+  res.json(db.prepare('SELECT * FROM profit_notes ORDER BY note_date DESC, id DESC').all());
+});
+
+/** POST /api/profit-split/notes  { note_date, body } */
+profitSplitRouter.post('/notes', adminGate, (req, res) => {
+  const parsed = readNoteBody(req.body);
+  if (parsed.error) return res.status(400).json({ error: parsed.error });
+
+  const info = db.prepare(
+    'INSERT INTO profit_notes (note_date, body, created_by) VALUES (?, ?, ?)'
+  ).run(parsed.noteDate, parsed.body, req.user?.email ?? null);
+
+  logAudit(req, { action: 'split-note-added', detail: `${parsed.noteDate}: "${snippet(parsed.body)}"` });
+  return res.status(201).json(db.prepare('SELECT * FROM profit_notes WHERE id = ?').get(info.lastInsertRowid));
+});
+
+/** PATCH /api/profit-split/notes/:id  { note_date?, body? } */
+profitSplitRouter.patch('/notes/:id', adminGate, (req, res) => {
+  const id = Number(req.params.id);
+  const existing = db.prepare('SELECT * FROM profit_notes WHERE id = ?').get(id);
+  if (!existing) return res.status(404).json({ error: 'Note not found' });
+
+  const parsed = readNoteBody(req.body, existing);
+  if (parsed.error) return res.status(400).json({ error: parsed.error });
+
+  // Both sides recorded: "edited a note" says nothing useful on its own.
+  const changes = [];
+  if (parsed.noteDate !== existing.note_date) changes.push(`date ${existing.note_date} → ${parsed.noteDate}`);
+  if (parsed.body !== existing.body) changes.push(`text "${snippet(existing.body)}" → "${snippet(parsed.body)}"`);
+  if (!changes.length) return res.json(existing);
+
+  db.prepare(
+    "UPDATE profit_notes SET note_date = ?, body = ?, updated_by = ?, updated_at = datetime('now') WHERE id = ?"
+  ).run(parsed.noteDate, parsed.body, req.user?.email ?? null, id);
+
+  logAudit(req, { action: 'split-note-edited', detail: changes.join('; ') });
+  return res.json(db.prepare('SELECT * FROM profit_notes WHERE id = ?').get(id));
+});
+
+/** DELETE /api/profit-split/notes/:id */
+profitSplitRouter.delete('/notes/:id', adminGate, (req, res) => {
+  const id = Number(req.params.id);
+  // Read before the delete — afterwards there is nothing left to describe.
+  const existing = db.prepare('SELECT * FROM profit_notes WHERE id = ?').get(id);
+  if (!existing) return res.status(404).json({ error: 'Note not found' });
+
+  db.prepare('DELETE FROM profit_notes WHERE id = ?').run(id);
+  logAudit(req, { action: 'split-note-deleted', detail: `${existing.note_date}: "${snippet(existing.body)}"` });
+  return res.json({ ok: true, id });
+});
+
 /** PATCH /api/profit-split/:period  { notes } — a comment against one week or the closed row. */
 profitSplitRouter.patch('/:period', adminGate, (req, res) => {
   const { period } = req.params;

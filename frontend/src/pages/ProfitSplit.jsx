@@ -44,13 +44,20 @@ export default function ProfitSplit() {
   const [form, setForm] = useState(emptyForm());
   const [busy, setBusy] = useState(false);
   const [notesDraft, setNotesDraft] = useState({});
+  const [notes, setNotes] = useState([]);
+  const [noteForm, setNoteForm] = useState(() => ({ note_date: todayISO(), body: '' }));
+  const [editingNote, setEditingNote] = useState(null); // { id, note_date, body }
+  const [noteBusy, setNoteBusy] = useState(false);
   const scrollRef = useRef(null);
   const [ledgerMaxH, setLedgerMaxH] = useState(null);
 
   const load = async () => {
-    const [split, receipts] = await Promise.all([api.profitSplit(), api.profitReceipts()]);
+    const [split, receipts, noteRows] = await Promise.all([
+      api.profitSplit(), api.profitReceipts(), api.profitNotes(),
+    ]);
     setData(split);
     setLedger(receipts);
+    setNotes(noteRows);
   };
   useEffect(() => { load().catch((e) => setError(e.message)); }, []);
 
@@ -123,6 +130,40 @@ export default function ProfitSplit() {
     setError(null);
     try {
       await api.deleteProfitReceipt(rc.id);
+      await load();
+    } catch (err) {
+      setError(err.message);
+    }
+  };
+
+  const submitNote = async (e) => {
+    e.preventDefault();
+    setNoteBusy(true);
+    setError(null);
+    try {
+      if (editingNote) {
+        await api.updateProfitNote(editingNote.id, {
+          note_date: editingNote.note_date, body: editingNote.body,
+        });
+        setEditingNote(null);
+      } else {
+        await api.addProfitNote(noteForm);
+        setNoteForm({ note_date: todayISO(), body: '' });
+      }
+      await load();
+    } catch (err) {
+      setError(err.message);
+    } finally {
+      setNoteBusy(false);
+    }
+  };
+
+  const removeNote = async (note) => {
+    if (!window.confirm(`Delete the note from ${note.note_date}?`)) return;
+    setError(null);
+    try {
+      await api.deleteProfitNote(note.id);
+      if (editingNote?.id === note.id) setEditingNote(null);
       await load();
     } catch (err) {
       setError(err.message);
@@ -318,6 +359,66 @@ export default function ProfitSplit() {
               })}
             </tbody>
           </table>
+        )}
+      </div>
+
+      <div className="panel">
+        <h2>Notes<span className="panel-count">{notes.length}</span></h2>
+        <p className="muted" style={{ fontSize: 12, marginTop: 0 }}>
+          Anything worth recording against a day that isn’t a payment. Every change is kept in
+          the activity trail, with who made it and what it said before.
+        </p>
+
+        <form className="note-form" onSubmit={submitNote}>
+          <label>Date
+            <input
+              type="date" required
+              value={editingNote ? editingNote.note_date : noteForm.note_date}
+              onChange={(e) => (editingNote
+                ? setEditingNote((n) => ({ ...n, note_date: e.target.value }))
+                : setNoteForm((f) => ({ ...f, note_date: e.target.value })))}
+            />
+          </label>
+          <label className="grow">Note
+            <textarea
+              rows={2} required placeholder="e.g. owner collected in person — short by $40, counted twice"
+              value={editingNote ? editingNote.body : noteForm.body}
+              onChange={(e) => (editingNote
+                ? setEditingNote((n) => ({ ...n, body: e.target.value }))
+                : setNoteForm((f) => ({ ...f, body: e.target.value })))}
+            />
+          </label>
+          <div className="note-form-actions">
+            <button className="btn" disabled={noteBusy}>
+              {noteBusy ? 'Saving…' : editingNote ? 'Save changes' : 'Add note'}
+            </button>
+            {editingNote && (
+              <button type="button" className="secondary" onClick={() => setEditingNote(null)}>Cancel</button>
+            )}
+          </div>
+        </form>
+
+        {notes.length === 0 ? (
+          <p className="muted" style={{ marginTop: 16 }}>No notes yet.</p>
+        ) : (
+          <ul className="note-list">
+            {notes.map((n) => (
+              <li key={n.id} className={editingNote?.id === n.id ? 'editing' : undefined}>
+                <div className="note-head">
+                  <strong>{dayLabel(n.note_date)}</strong>
+                  <span className="note-actions">
+                    <button className="secondary row-action" onClick={() => setEditingNote({ ...n })}>Edit</button>
+                    <button className="danger row-action" onClick={() => removeNote(n)}>Delete</button>
+                  </span>
+                </div>
+                <div className="note-body">{n.body}</div>
+                <div className="muted note-meta">
+                  {n.created_by || 'someone'}
+                  {n.updated_at && ` · edited by ${n.updated_by || 'someone'}`}
+                </div>
+              </li>
+            ))}
+          </ul>
         )}
       </div>
     </>

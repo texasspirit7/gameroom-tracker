@@ -790,3 +790,41 @@ input[type="date"] { color-scheme: dark; }
   display: flex; gap: 8px; flex-wrap: wrap; margin: 0 0 14px;
 }
 .activity-filters button { font-size: 12px; padding: 5px 11px; }
+
+
+/* ---- Profit Split: dated notes -------------------------------------------------------- */
+
+.note-form {
+  display: flex; gap: 12px; align-items: flex-start; flex-wrap: wrap;
+  padding: 14px 16px; border: 1px solid var(--line); border-radius: var(--radius);
+  background: var(--sunk);
+}
+.note-form label {
+  display: flex; flex-direction: column; gap: 4px;
+  font-size: 11px; letter-spacing: 0.06em; text-transform: uppercase; color: var(--muted);
+}
+/* Flex children default to min-width:auto and refuse to shrink — without this the textarea
+   pushes the buttons off the panel on a narrow window. */
+.note-form label.grow { flex: 1; min-width: 220px; }
+.note-form input, .note-form textarea { font: inherit; font-size: 13px; }
+.note-form textarea { resize: vertical; }
+.note-form-actions { display: flex; gap: 8px; align-self: flex-end; padding-bottom: 1px; }
+
+.note-list { list-style: none; margin: 18px 0 0; padding: 0; display: flex; flex-direction: column; gap: 12px; }
+.note-list li { padding-bottom: 12px; border-bottom: 1px solid var(--line-soft); }
+.note-list li:last-child { border-bottom: none; padding-bottom: 0; }
+/* The row being edited is pulled out so it is obvious which one the form is bound to. */
+.note-list li.editing {
+  border-left: 3px solid var(--accent); padding-left: 10px;
+  background: rgba(201, 162, 39, 0.06);
+}
+.note-head { display: flex; align-items: center; justify-content: space-between; gap: 10px; }
+.note-head strong { font-family: var(--mono); font-size: 13px; color: var(--ink); }
+.note-actions { display: flex; gap: 6px; }
+.note-body { font-size: 13px; color: var(--ink-2); margin-top: 4px; white-space: pre-wrap; }
+.note-meta { font-size: 11px; margin-top: 3px; }
+
+@media (max-width: 720px) {
+  .note-form label.grow { flex-basis: 100%; }
+  .note-form-actions { width: 100%; }
+}

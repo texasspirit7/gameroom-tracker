@@ -133,6 +133,19 @@ db.exec(`
     created_at TEXT NOT NULL DEFAULT (datetime('now'))
   );
 
+  -- Dated free-text notes on the Profit Split page: anything worth recording against a day
+  -- that isn't a payment. Separate from profit_splits.notes, which is a comment attached to a
+  -- specific week; these stand on their own and carry whatever date you give them.
+  CREATE TABLE IF NOT EXISTS profit_notes (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    note_date TEXT NOT NULL,                        -- YYYY-MM-DD
+    body TEXT NOT NULL,
+    created_by TEXT,
+    created_at TEXT NOT NULL DEFAULT (datetime('now')),
+    updated_by TEXT,
+    updated_at TEXT
+  );
+
   -- Who did what to a sheet, and when — sheet_id/sheet_date are kept even after a
   -- delete (denormalized, not a foreign key) so the trail survives the sheet itself.
   CREATE TABLE IF NOT EXISTS audit_log (
@@ -151,6 +164,7 @@ db.exec(`
   CREATE INDEX IF NOT EXISTS idx_readings_machine ON machine_readings(machine_number);
   CREATE INDEX IF NOT EXISTS idx_other_expenses_date ON other_expenses(expense_date);
   CREATE INDEX IF NOT EXISTS idx_audit_log_created ON audit_log(created_at);
+  CREATE INDEX IF NOT EXISTS idx_profit_notes_date ON profit_notes(note_date);
 `);
 
 // One-time data fix: the sheet's "FD" row (Family Dollar store) was previously

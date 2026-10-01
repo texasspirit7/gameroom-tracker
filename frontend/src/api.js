@@ -68,6 +68,13 @@ export const api = {
   addProfitReceipt: (body) => request('/api/profit-split/receipts', { method: 'POST', body: JSON.stringify(body) }),
   deleteProfitReceipt: (id) => request(`/api/profit-split/receipts/${id}`, { method: 'DELETE' }),
 
+  // Dated free-text notes on the Profit Split page — standalone, not tied to a week.
+  profitNotes: () => request('/api/profit-split/notes'),
+  addProfitNote: (body) => request('/api/profit-split/notes', { method: 'POST', body: JSON.stringify(body) }),
+  updateProfitNote: (id, body) =>
+    request(`/api/profit-split/notes/${id}`, { method: 'PATCH', body: JSON.stringify(body) }),
+  deleteProfitNote: (id) => request(`/api/profit-split/notes/${id}`, { method: 'DELETE' }),
+
   // Every analytics call takes the page's range as a query string. The leaderboard is the
   // deliberate exception — it is all-time by design.
   analyticsByWeekday: (q = '') => request(`/api/analytics/weekday${q}`),
