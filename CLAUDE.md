@@ -4,7 +4,7 @@ Guidance for Claude Code when working in this repository.
 
 ## This is a LIVE PRODUCTION app
 
-`https://la-pryor.azurewebsites.net` — a real game room's daily reconciliation tracker, actively used.
+`https://whathappened.azurewebsites.net` — a real game room's daily reconciliation tracker, actively used.
 **Always run the regression suite before and after every change. Never skip this.**
 
 ```bash
@@ -29,7 +29,7 @@ Every test in this suite exists because something broke in production first:
 
 1. `npm test` — must pass.
 2. Commit + push to `main` → GitHub Actions (`.github/workflows/deploy.yml`) builds + deploys via OIDC.
-3. `curl https://la-pryor.azurewebsites.net/api/health` → expect `{"ok":true,...}`. Azure auto-recycles the
+3. `curl https://whathappened.azurewebsites.net/api/health` → expect `{"ok":true,...}`. Azure auto-recycles the
    container on deploy — do **not** also run `az webapp restart` unless health actually fails. Restarting after
    every deploy just stacks extra 30-130s downtime windows on top of each other (this happened — multiple
    restarts in quick succession while the user was actively on the site caused a real "everything is broken"

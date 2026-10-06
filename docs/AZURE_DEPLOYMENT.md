@@ -32,7 +32,7 @@ Requires the [Azure CLI](https://learn.microsoft.com/cli/azure/install-azure-cli
 
 ```bash
 # pick a globally-unique app name — this becomes <name>.azurewebsites.net
-APP_NAME=la-pryor-tracker
+APP_NAME=whathappened
 RESOURCE_GROUP=gameroom-rg
 LOCATION=eastus
 
@@ -157,7 +157,7 @@ az webapp config set --resource-group $RESOURCE_GROUP --name $APP_NAME \
              cp -r frontend/dist deploy/frontend/dist
          - uses: azure/webapps-deploy@v3
            with:
-             app-name: la-pryor-tracker
+             app-name: whathappened
              publish-profile: ${{ secrets.AZURE_WEBAPP_PUBLISH_PROFILE }}
              package: deploy
    ```

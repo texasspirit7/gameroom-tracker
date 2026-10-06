@@ -37,5 +37,5 @@ jobs:
 
       - name: Deploy to Azure Web App (zip deploy)
         run: |
-          az webapp deploy --resource-group gameroom-rg --name la-pryor \
+          az webapp deploy --resource-group gameroom-rg --name whathappened \
             --src-path deploy.zip --type zip
