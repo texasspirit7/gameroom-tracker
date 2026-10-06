@@ -47,7 +47,7 @@ function SignInScreen() {
     <div className="gate-screen">
       <div className="gate-card">
         <div className="gate-icon">📊</div>
-        <h2>Nothing Happens Here</h2>
+        <h2>What happened in La</h2>
         <p className="muted">Sign in to continue. New accounts need admin approval before they can view data.</p>
         {authProvider === 'google' ? <GoogleSignInScreen /> : <LocalLoginForm />}
       </div>
