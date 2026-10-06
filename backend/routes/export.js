@@ -1,5 +1,5 @@
 import { Router } from 'express';
-import { db } from '../db.js';
+import { locationOf } from '../locations.js';
 import { adminGate } from '../auth.js';
 import { buildProfitSplitRows } from './profitSplit.js';
 
@@ -34,7 +34,7 @@ function sendCsv(res, filename, csv) {
 // GET /api/export/sheets.csv?from=&to=
 exportRouter.get('/sheets.csv', (req, res) => {
   const { from, to } = resolveRange(req);
-  const rows = db.prepare(`
+  const rows = req.db.prepare(`
     SELECT s.id, s.sheet_date, s.source, s.total_in, s.total_out, s.match_amount, s.loan_rtn,
            s.start_bank, s.end_bank, s.meter_profit, s.cash_profit, s.over_short, s.status,
            COALESCE((SELECT SUM(amount) FROM expenses e WHERE e.sheet_id = s.id), 0) AS expenses
@@ -64,12 +64,12 @@ exportRouter.get('/sheets.csv', (req, res) => {
 // GET /api/export/expenses.csv?from=&to= — sheet-linked + manually-logged expenses, combined
 exportRouter.get('/expenses.csv', (req, res) => {
   const { from, to } = resolveRange(req);
-  const sheetExpenses = db.prepare(`
+  const sheetExpenses = req.db.prepare(`
     SELECT s.sheet_date AS date, ('Sheet #' || s.id) AS source, e.category, e.amount, e.note
     FROM expenses e JOIN sheets s ON s.id = e.sheet_id
     WHERE s.sheet_date BETWEEN ? AND ?
   `).all(from, to);
-  const otherExpenses = db.prepare(`
+  const otherExpenses = req.db.prepare(`
     SELECT expense_date AS date, 'Manual' AS source, category, amount, note
     FROM other_expenses WHERE expense_date BETWEEN ? AND ?
   `).all(from, to);
@@ -87,7 +87,8 @@ exportRouter.get('/expenses.csv', (req, res) => {
 
 // GET /api/export/profit-split.csv — admin-only, matches GET /api/profit-split gating
 exportRouter.get('/profit-split.csv', adminGate, (req, res) => {
-  const rows = buildProfitSplitRows();
+  const loc = locationOf(req.location);
+  const rows = buildProfitSplitRows(req.db, loc);
   const csv = toCsv([
     { key: 'period_start', label: 'Week Starting' },
     { key: 'period_end', label: 'Week Ending' },

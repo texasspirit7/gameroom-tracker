@@ -3,10 +3,12 @@ import { api } from '../api.js';
 import { useAuth } from '../AuthContext.jsx';
 
 export default function AdminUsers() {
-  const { user: me, isAdmin, authEnabled } = useAuth();
+  const { user: me, isAdmin, authEnabled, locationLabel } = useAuth();
   const canManage = !authEnabled || isAdmin;
   const [users, setUsers] = useState(null);
   const [error, setError] = useState(null);
+  const [invite, setInvite] = useState({ email: '', name: '' });
+  const [inviting, setInviting] = useState(false);
 
   const load = () => api.adminUsers().then(setUsers).catch((e) => setError(e.message));
   useEffect(() => { load(); }, []);
@@ -18,6 +20,21 @@ export default function AdminUsers() {
       load();
     } catch (e) {
       setError(e.message);
+    }
+  };
+
+  const addUser = async (e) => {
+    e.preventDefault();
+    setInviting(true);
+    setError(null);
+    try {
+      await api.addUser(invite.email.trim(), invite.name.trim());
+      setInvite({ email: '', name: '' });
+      load();
+    } catch (err) {
+      setError(err.message);
+    } finally {
+      setInviting(false);
     }
   };
 
@@ -36,6 +53,35 @@ export default function AdminUsers() {
           : 'Who has access — approving and blocking requires an admin account.'}
       </div>
       {error && <div className="error-box">{error}</div>}
+
+      {canManage && (
+        <div className="panel">
+          <h2>Give someone access</h2>
+          {/* Sign-in only offers locations you're already approved for, so without this a new
+              person would sign in and be shown nothing at all. */}
+          <p className="muted" style={{ fontSize: 12, marginTop: 0 }}>
+            Adds an approved account for <strong>{locationLabel || 'this location'}</strong> only.
+            They can sign in straight away; other locations stay closed to them.
+          </p>
+          <form className="receipt-form" onSubmit={addUser}>
+            <label className="grow">Email
+              <input
+                type="email" required placeholder="someone@example.com"
+                value={invite.email}
+                onChange={(ev) => setInvite((v) => ({ ...v, email: ev.target.value }))}
+              />
+            </label>
+            <label className="grow">Name (optional)
+              <input
+                type="text" placeholder="Their name"
+                value={invite.name}
+                onChange={(ev) => setInvite((v) => ({ ...v, name: ev.target.value }))}
+              />
+            </label>
+            <button className="btn" disabled={inviting}>{inviting ? 'Adding…' : 'Add user'}</button>
+          </form>
+        </div>
+      )}
 
       {pending.length > 0 && (
         <div className="panel">

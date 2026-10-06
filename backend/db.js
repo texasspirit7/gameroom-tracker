@@ -1,24 +1,69 @@
 import { DatabaseSync } from 'node:sqlite';
 import path from 'node:path';
 import { config } from './config.js';
+import { LOCATIONS, isLocation } from './locations.js';
 
-export const db = new DatabaseSync(path.join(config.dataDir, 'gameroom.db'));
+/**
+ * Creates the schema and brings an existing file up to date. Runs once per database, the
+ * first time that location is opened, rather than once at import.
+ */
+function applySchema(db) {
+  db.exec('PRAGMA journal_mode = WAL');
 
-db.exec('PRAGMA journal_mode = WAL');
+  // One-time migration: sheet_date used to be UNIQUE (one sheet per day). Multiple
+  // sheets per date are now allowed (e.g. separate shifts) — rebuild the table
+  // without the constraint if it's still present from an earlier version.
+  const existingSheetsSql = db.prepare(
+    "SELECT sql FROM sqlite_master WHERE type='table' AND name='sheets'"
+  ).get()?.sql;
+  if (existingSheetsSql && /sheet_date TEXT NOT NULL UNIQUE/.test(existingSheetsSql)) {
+    db.exec('PRAGMA foreign_keys = OFF');
+    db.exec(`
+      CREATE TABLE sheets_new (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        sheet_date TEXT NOT NULL,
+        source TEXT NOT NULL DEFAULT 'image',
+        file_path TEXT,
+        total_in REAL NOT NULL DEFAULT 0,
+        total_out REAL NOT NULL DEFAULT 0,
+        match_amount REAL NOT NULL DEFAULT 0,
+        loan_rtn REAL NOT NULL DEFAULT 0,
+        start_bank REAL,
+        end_bank REAL,
+        meter_profit REAL,
+        cash_profit REAL,
+        over_short REAL,
+        notes TEXT,
+        status TEXT NOT NULL DEFAULT 'review',
+        validation_json TEXT,
+        created_at TEXT NOT NULL DEFAULT (datetime('now'))
+      );
+      INSERT INTO sheets_new SELECT * FROM sheets;
+      DROP TABLE sheets;
+      ALTER TABLE sheets_new RENAME TO sheets;
+    `);
+    db.exec('PRAGMA foreign_keys = ON');
+  }
 
-// One-time migration: sheet_date used to be UNIQUE (one sheet per day). Multiple
-// sheets per date are now allowed (e.g. separate shifts) — rebuild the table
-// without the constraint if it's still present from an earlier version.
-const existingSheetsSql = db.prepare(
-  "SELECT sql FROM sqlite_master WHERE type='table' AND name='sheets'"
-).get()?.sql;
-if (existingSheetsSql && /sheet_date TEXT NOT NULL UNIQUE/.test(existingSheetsSql)) {
-  db.exec('PRAGMA foreign_keys = OFF');
   db.exec(`
-    CREATE TABLE sheets_new (
+    PRAGMA foreign_keys = ON;
+
+    CREATE TABLE IF NOT EXISTS users (
       id INTEGER PRIMARY KEY AUTOINCREMENT,
-      sheet_date TEXT NOT NULL,
-      source TEXT NOT NULL DEFAULT 'image',
+      email TEXT NOT NULL UNIQUE,
+      name TEXT,
+      picture TEXT,
+      role TEXT NOT NULL DEFAULT 'user',              -- 'admin' | 'user'
+      status TEXT NOT NULL DEFAULT 'pending',         -- 'pending' | 'approved' | 'blocked'
+      created_at TEXT NOT NULL DEFAULT (datetime('now')),
+      approved_at TEXT,
+      approved_by TEXT
+    );
+
+    CREATE TABLE IF NOT EXISTS sheets (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      sheet_date TEXT NOT NULL,                       -- YYYY-MM-DD (single location) — one sheet per day, enforced on upload and on date edits
+      source TEXT NOT NULL DEFAULT 'image',           -- 'image' | 'xlsx' | 'seed'
       file_path TEXT,
       total_in REAL NOT NULL DEFAULT 0,
       total_out REAL NOT NULL DEFAULT 0,
@@ -26,180 +71,165 @@ if (existingSheetsSql && /sheet_date TEXT NOT NULL UNIQUE/.test(existingSheetsSq
       loan_rtn REAL NOT NULL DEFAULT 0,
       start_bank REAL,
       end_bank REAL,
-      meter_profit REAL,
-      cash_profit REAL,
-      over_short REAL,
+      meter_profit REAL,                              -- (in + loan_rtn) - (out + match + expenses)
+      cash_profit REAL,                               -- actual counted cash profit
+      over_short REAL,                                -- cash_profit - meter_profit
       notes TEXT,
-      status TEXT NOT NULL DEFAULT 'review',
+      status TEXT NOT NULL DEFAULT 'review',          -- 'review' | 'verified'
       validation_json TEXT,
       created_at TEXT NOT NULL DEFAULT (datetime('now'))
     );
-    INSERT INTO sheets_new SELECT * FROM sheets;
-    DROP TABLE sheets;
-    ALTER TABLE sheets_new RENAME TO sheets;
+
+    CREATE TABLE IF NOT EXISTS machine_readings (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      sheet_id INTEGER NOT NULL REFERENCES sheets(id) ON DELETE CASCADE,
+      machine_number INTEGER NOT NULL,
+      prev_in REAL NOT NULL DEFAULT 0,
+      curr_in REAL NOT NULL DEFAULT 0,
+      daily_in REAL NOT NULL DEFAULT 0,
+      prev_out REAL NOT NULL DEFAULT 0,
+      curr_out REAL NOT NULL DEFAULT 0,
+      daily_out REAL NOT NULL DEFAULT 0,
+      UNIQUE(sheet_id, machine_number)
+    );
+
+    CREATE TABLE IF NOT EXISTS expenses (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      sheet_id INTEGER NOT NULL REFERENCES sheets(id) ON DELETE CASCADE,
+      category TEXT NOT NULL,
+      amount REAL NOT NULL DEFAULT 0,
+      note TEXT
+    );
+
+    -- Recurring overhead costs (rent, electricity, etc.) — independent of daily sheets
+    CREATE TABLE IF NOT EXISTS other_expenses (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      expense_date TEXT NOT NULL,                     -- YYYY-MM-DD
+      category TEXT NOT NULL,
+      amount REAL NOT NULL DEFAULT 0,
+      note TEXT,
+      created_by TEXT,
+      created_at TEXT NOT NULL DEFAULT (datetime('now'))
+    );
+
+    -- Free-text comments against a split period. A period is either 'closed' (the settled
+    -- history before the close-out) or a week's Monday as YYYY-MM-DD. Whether a period has
+    -- been paid is derived from profit_receipts, not stored here.
+    CREATE TABLE IF NOT EXISTS profit_splits (
+      period TEXT PRIMARY KEY,
+      notes TEXT
+    );
+
+    -- Money actually received against what the 40% side is owed. Deliberately separate from
+    -- the split calculation: the split is an *entitlement* derived from profit earned, this is
+    -- the *settlement* of it. Recording a receipt must never move a month's amount_40.
+    --
+    -- Receipts belong to the account, not to a month. Payments arrive in lump sums that rarely
+    -- line up with month boundaries, so they pay down one running balance and month-by-month
+    -- coverage is derived from that oldest-first.
+    CREATE TABLE IF NOT EXISTS profit_receipts (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      received_on TEXT NOT NULL,                      -- YYYY-MM-DD
+      amount REAL NOT NULL DEFAULT 0,                 -- cash received
+      expense_credit REAL NOT NULL DEFAULT 0,         -- value received as expenses instead of cash
+      note TEXT,
+      created_by TEXT,
+      created_at TEXT NOT NULL DEFAULT (datetime('now'))
+    );
+
+    -- Dated free-text notes on the Profit Split page: anything worth recording against a day
+    -- that isn't a payment. Separate from profit_splits.notes, which is a comment attached to a
+    -- specific week; these stand on their own and carry whatever date you give them.
+    CREATE TABLE IF NOT EXISTS profit_notes (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      note_date TEXT NOT NULL,                        -- YYYY-MM-DD
+      body TEXT NOT NULL,
+      created_by TEXT,
+      created_at TEXT NOT NULL DEFAULT (datetime('now')),
+      updated_by TEXT,
+      updated_at TEXT
+    );
+
+    -- Who did what to a sheet, and when — sheet_id/sheet_date are kept even after a
+    -- delete (denormalized, not a foreign key) so the trail survives the sheet itself.
+    CREATE TABLE IF NOT EXISTS audit_log (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      action TEXT NOT NULL,                           -- 'created' | 'edited' | 'verified' | 'deleted'
+      sheet_id INTEGER,
+      sheet_date TEXT,
+      actor_email TEXT,
+      actor_name TEXT,
+      detail TEXT,
+      created_at TEXT NOT NULL DEFAULT (datetime('now'))
+    );
+
+    CREATE INDEX IF NOT EXISTS idx_sheets_date ON sheets(sheet_date);
+    CREATE INDEX IF NOT EXISTS idx_readings_sheet ON machine_readings(sheet_id);
+    CREATE INDEX IF NOT EXISTS idx_readings_machine ON machine_readings(machine_number);
+    CREATE INDEX IF NOT EXISTS idx_other_expenses_date ON other_expenses(expense_date);
+    CREATE INDEX IF NOT EXISTS idx_audit_log_created ON audit_log(created_at);
+    CREATE INDEX IF NOT EXISTS idx_profit_notes_date ON profit_notes(note_date);
   `);
-  db.exec('PRAGMA foreign_keys = ON');
-}
 
-db.exec(`
-  PRAGMA foreign_keys = ON;
+  // One-time data fix: the sheet's "FD" row (Family Dollar store) was previously
+  // mislabeled as category "food" — relabel any already-stored rows.
+  db.exec("UPDATE expenses SET category = 'family dollar' WHERE category = 'food'");
 
-  CREATE TABLE IF NOT EXISTS users (
-    id INTEGER PRIMARY KEY AUTOINCREMENT,
-    email TEXT NOT NULL UNIQUE,
-    name TEXT,
-    picture TEXT,
-    role TEXT NOT NULL DEFAULT 'user',              -- 'admin' | 'user'
-    status TEXT NOT NULL DEFAULT 'pending',         -- 'pending' | 'approved' | 'blocked'
-    created_at TEXT NOT NULL DEFAULT (datetime('now')),
-    approved_at TEXT,
-    approved_by TEXT
-  );
+  // One-time data fix: "name" is the row label for a payee under Pay, not a
+  // real category — Claude vision extraction sometimes used it verbatim,
+  // producing a duplicate-looking "name" entry alongside the correct "pay" one.
+  db.exec("UPDATE expenses SET category = 'pay' WHERE category = 'name'");
 
-  CREATE TABLE IF NOT EXISTS sheets (
-    id INTEGER PRIMARY KEY AUTOINCREMENT,
-    sheet_date TEXT NOT NULL,                       -- YYYY-MM-DD (single location) — one sheet per day, enforced on upload and on date edits
-    source TEXT NOT NULL DEFAULT 'image',           -- 'image' | 'xlsx' | 'seed'
-    file_path TEXT,
-    total_in REAL NOT NULL DEFAULT 0,
-    total_out REAL NOT NULL DEFAULT 0,
-    match_amount REAL NOT NULL DEFAULT 0,
-    loan_rtn REAL NOT NULL DEFAULT 0,
-    start_bank REAL,
-    end_bank REAL,
-    meter_profit REAL,                              -- (in + loan_rtn) - (out + match + expenses)
-    cash_profit REAL,                               -- actual counted cash profit
-    over_short REAL,                                -- cash_profit - meter_profit
-    notes TEXT,
-    status TEXT NOT NULL DEFAULT 'review',          -- 'review' | 'verified'
-    validation_json TEXT,
-    created_at TEXT NOT NULL DEFAULT (datetime('now'))
-  );
-
-  CREATE TABLE IF NOT EXISTS machine_readings (
-    id INTEGER PRIMARY KEY AUTOINCREMENT,
-    sheet_id INTEGER NOT NULL REFERENCES sheets(id) ON DELETE CASCADE,
-    machine_number INTEGER NOT NULL,
-    prev_in REAL NOT NULL DEFAULT 0,
-    curr_in REAL NOT NULL DEFAULT 0,
-    daily_in REAL NOT NULL DEFAULT 0,
-    prev_out REAL NOT NULL DEFAULT 0,
-    curr_out REAL NOT NULL DEFAULT 0,
-    daily_out REAL NOT NULL DEFAULT 0,
-    UNIQUE(sheet_id, machine_number)
-  );
-
-  CREATE TABLE IF NOT EXISTS expenses (
-    id INTEGER PRIMARY KEY AUTOINCREMENT,
-    sheet_id INTEGER NOT NULL REFERENCES sheets(id) ON DELETE CASCADE,
-    category TEXT NOT NULL,
-    amount REAL NOT NULL DEFAULT 0,
-    note TEXT
-  );
-
-  -- Recurring overhead costs (rent, electricity, etc.) — independent of daily sheets
-  CREATE TABLE IF NOT EXISTS other_expenses (
-    id INTEGER PRIMARY KEY AUTOINCREMENT,
-    expense_date TEXT NOT NULL,                     -- YYYY-MM-DD
-    category TEXT NOT NULL,
-    amount REAL NOT NULL DEFAULT 0,
-    note TEXT,
-    created_by TEXT,
-    created_at TEXT NOT NULL DEFAULT (datetime('now'))
-  );
-
-  -- Free-text comments against a split period. A period is either 'closed' (the settled
-  -- history before the close-out) or a week's Monday as YYYY-MM-DD. Whether a period has
-  -- been paid is derived from profit_receipts, not stored here.
-  CREATE TABLE IF NOT EXISTS profit_splits (
-    period TEXT PRIMARY KEY,
-    notes TEXT
-  );
-
-  -- Money actually received against what the 40% side is owed. Deliberately separate from
-  -- the split calculation: the split is an *entitlement* derived from profit earned, this is
-  -- the *settlement* of it. Recording a receipt must never move a month's amount_40.
-  --
-  -- Receipts belong to the account, not to a month. Payments arrive in lump sums that rarely
-  -- line up with month boundaries, so they pay down one running balance and month-by-month
-  -- coverage is derived from that oldest-first.
-  CREATE TABLE IF NOT EXISTS profit_receipts (
-    id INTEGER PRIMARY KEY AUTOINCREMENT,
-    received_on TEXT NOT NULL,                      -- YYYY-MM-DD
-    amount REAL NOT NULL DEFAULT 0,                 -- cash received
-    expense_credit REAL NOT NULL DEFAULT 0,         -- value received as expenses instead of cash
-    note TEXT,
-    created_by TEXT,
-    created_at TEXT NOT NULL DEFAULT (datetime('now'))
-  );
-
-  -- Dated free-text notes on the Profit Split page: anything worth recording against a day
-  -- that isn't a payment. Separate from profit_splits.notes, which is a comment attached to a
-  -- specific week; these stand on their own and carry whatever date you give them.
-  CREATE TABLE IF NOT EXISTS profit_notes (
-    id INTEGER PRIMARY KEY AUTOINCREMENT,
-    note_date TEXT NOT NULL,                        -- YYYY-MM-DD
-    body TEXT NOT NULL,
-    created_by TEXT,
-    created_at TEXT NOT NULL DEFAULT (datetime('now')),
-    updated_by TEXT,
-    updated_at TEXT
-  );
-
-  -- Who did what to a sheet, and when — sheet_id/sheet_date are kept even after a
-  -- delete (denormalized, not a foreign key) so the trail survives the sheet itself.
-  CREATE TABLE IF NOT EXISTS audit_log (
-    id INTEGER PRIMARY KEY AUTOINCREMENT,
-    action TEXT NOT NULL,                           -- 'created' | 'edited' | 'verified' | 'deleted'
-    sheet_id INTEGER,
-    sheet_date TEXT,
-    actor_email TEXT,
-    actor_name TEXT,
-    detail TEXT,
-    created_at TEXT NOT NULL DEFAULT (datetime('now'))
-  );
-
-  CREATE INDEX IF NOT EXISTS idx_sheets_date ON sheets(sheet_date);
-  CREATE INDEX IF NOT EXISTS idx_readings_sheet ON machine_readings(sheet_id);
-  CREATE INDEX IF NOT EXISTS idx_readings_machine ON machine_readings(machine_number);
-  CREATE INDEX IF NOT EXISTS idx_other_expenses_date ON other_expenses(expense_date);
-  CREATE INDEX IF NOT EXISTS idx_audit_log_created ON audit_log(created_at);
-  CREATE INDEX IF NOT EXISTS idx_profit_notes_date ON profit_notes(note_date);
-`);
-
-// One-time data fix: the sheet's "FD" row (Family Dollar store) was previously
-// mislabeled as category "food" — relabel any already-stored rows.
-db.exec("UPDATE expenses SET category = 'family dollar' WHERE category = 'food'");
-
-// One-time data fix: "name" is the row label for a payee under Pay, not a
-// real category — Claude vision extraction sometimes used it verbatim,
-// producing a duplicate-looking "name" entry alongside the correct "pay" one.
-db.exec("UPDATE expenses SET category = 'pay' WHERE category = 'name'");
-
-// One-time migration: receipts moved from per-month attribution to a single running account,
-// so the month column is no longer written or read.
-if (db.prepare('PRAGMA table_info(profit_receipts)').all().some((c) => c.name === 'month')) {
-  db.exec('DROP INDEX IF EXISTS idx_profit_receipts_month');
-  db.exec('ALTER TABLE profit_receipts DROP COLUMN month');
-}
-
-// One-time migration: free-text notes per period on the Profit Split page.
-if (!db.prepare('PRAGMA table_info(profit_splits)').all().some((c) => c.name === 'notes')) {
-  db.exec('ALTER TABLE profit_splits ADD COLUMN notes TEXT');
-}
-
-// One-time migration: the 40/60 split moved from calendar months to Monday–Sunday weeks, so
-// the key is now a period (a week's Monday, or 'closed') rather than a month.
-{
-  const cols = db.prepare('PRAGMA table_info(profit_splits)').all().map((c) => c.name);
-  if (cols.includes('month')) {
-    db.exec('ALTER TABLE profit_splits RENAME COLUMN month TO period');
-    // Month-keyed rows all fall inside the closed period now, so their comments no longer
-    // belong to any row the page can show. Dropped rather than left as unreachable data.
-    db.exec("DELETE FROM profit_splits WHERE period LIKE '____-__'");
+  // One-time migration: receipts moved from per-month attribution to a single running account,
+  // so the month column is no longer written or read.
+  if (db.prepare('PRAGMA table_info(profit_receipts)').all().some((c) => c.name === 'month')) {
+    db.exec('DROP INDEX IF EXISTS idx_profit_receipts_month');
+    db.exec('ALTER TABLE profit_receipts DROP COLUMN month');
   }
-  // The paid flag is gone: settlement is derived from what has actually been received.
-  for (const dead of ['paid', 'paid_at', 'paid_by']) {
-    if (cols.includes(dead)) db.exec(`ALTER TABLE profit_splits DROP COLUMN ${dead}`);
+
+  // One-time migration: free-text notes per period on the Profit Split page.
+  if (!db.prepare('PRAGMA table_info(profit_splits)').all().some((c) => c.name === 'notes')) {
+    db.exec('ALTER TABLE profit_splits ADD COLUMN notes TEXT');
   }
+
+  // One-time migration: the 40/60 split moved from calendar months to Monday–Sunday weeks, so
+  // the key is now a period (a week's Monday, or 'closed') rather than a month.
+  {
+    const cols = db.prepare('PRAGMA table_info(profit_splits)').all().map((c) => c.name);
+    if (cols.includes('month')) {
+      db.exec('ALTER TABLE profit_splits RENAME COLUMN month TO period');
+      // Month-keyed rows all fall inside the closed period now, so their comments no longer
+      // belong to any row the page can show. Dropped rather than left as unreachable data.
+      db.exec("DELETE FROM profit_splits WHERE period LIKE '____-__'");
+    }
+    // The paid flag is gone: settlement is derived from what has actually been received.
+    for (const dead of ['paid', 'paid_at', 'paid_by']) {
+      if (cols.includes(dead)) db.exec(`ALTER TABLE profit_splits DROP COLUMN ${dead}`);
+    }
+  }
+}
+
+/**
+ * One open database per location, opened lazily and kept for the process lifetime.
+ *
+ * There is deliberately no default export: a call site that forgets to say which location it
+ * means should fail loudly, not quietly read whichever database happened to be first.
+ */
+const open = new Map();
+
+export function getDb(locationKey) {
+  if (!isLocation(locationKey)) throw new Error(`Unknown location: ${locationKey}`);
+  let db = open.get(locationKey);
+  if (!db) {
+    db = new DatabaseSync(path.join(config.dataDir, LOCATIONS[locationKey].dbFile));
+    applySchema(db);
+    open.set(locationKey, db);
+  }
+  return db;
+}
+
+/** Closes every open database — used by tests to tear down between runs. */
+export function closeAllDbs() {
+  for (const db of open.values()) db.close();
+  open.clear();
 }

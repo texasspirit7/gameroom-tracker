@@ -9,6 +9,11 @@ export function AuthProvider({ children }) {
   const [loading, setLoading] = useState(true);
   const [authEnabled, setAuthEnabled] = useState(false);
   const [authProvider, setAuthProvider] = useState('local');
+  // Set once an identity is proven: the locations that identity may actually enter, which
+  // is why nothing is offered until someone has said who they are.
+  const [allowed, setAllowed] = useState(null);   // null = not identified yet
+  const [locationNames, setLocationNames] = useState({});
+  const [pendingApproval, setPendingApproval] = useState(false);
   const [googleClientId, setGoogleClientId] = useState('');
   const [user, setUser] = useState(null);
   const [error, setError] = useState(null);
@@ -19,6 +24,7 @@ export function AuthProvider({ children }) {
       const cfg = await api.authConfig();
       setAuthEnabled(cfg.authEnabled);
       setAuthProvider(cfg.authProvider);
+      setLocationNames(cfg.locationNames || {});
       setGoogleClientId(cfg.googleClientId || '');
       if (!cfg.authEnabled) {
         setUser(null);
@@ -37,11 +43,35 @@ export function AuthProvider({ children }) {
 
   useEffect(() => { refresh(); }, []);
 
+  /** Exchange a proven identity for a session at one location. */
+  const enter = async (location) => {
+    setError(null);
+    try {
+      const { user: me } = await api.enterLocation(location);
+      setUser(me);
+      setAllowed(null);
+      return true;
+    } catch (e) {
+      setError(e.message);
+      return false;
+    }
+  };
+
+  /** Back to the start of sign-in — used by the "not you?" link. */
+  const resetIdentity = () => {
+    setAllowed(null);
+    setPendingApproval(false);
+    setError(null);
+  };
+
   const login = async (name, email) => {
     setError(null);
     try {
-      const { user: me } = await api.loginLocal(name, email);
-      setUser(me);
+      const { locations, pending } = await api.identifyLocal(name, email);
+      setAllowed(locations);
+      setPendingApproval(Boolean(pending));
+      // One door means there is nothing to choose — go straight in.
+      if (locations.length === 1) return enter(locations[0].key);
       return true;
     } catch (e) {
       setError(e.message);
@@ -52,8 +82,11 @@ export function AuthProvider({ children }) {
   const loginWithGoogle = async (credential) => {
     setError(null);
     try {
-      const { user: me } = await api.loginGoogle(credential);
-      setUser(me);
+      const { locations, pending } = await api.identifyGoogle(credential);
+      setAllowed(locations);
+      setPendingApproval(Boolean(pending));
+      // One door means there is nothing to choose — go straight in.
+      if (locations.length === 1) return enter(locations[0].key);
       return true;
     } catch (e) {
       setError(e.message);
@@ -98,6 +131,9 @@ export function AuthProvider({ children }) {
     <AuthContext.Provider value={{
       loading, authEnabled, authProvider, googleClientId, user, error,
       login, loginWithGoogle, logout, isAdmin, isOwner, refresh,
+      allowed, pendingApproval, enter, resetIdentity,
+      // Which location this session is in — the shell names it so the two can't be confused.
+      locationLabel: locationNames[user?.location] || null,
     }}>
       {children}
     </AuthContext.Provider>

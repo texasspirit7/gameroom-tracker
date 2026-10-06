@@ -828,3 +828,15 @@ input[type="date"] { color-scheme: dark; }
   .note-form label.grow { flex-basis: 100%; }
   .note-form-actions { width: 100%; }
 }
+
+
+/* ---- Sign-in: choosing a location ----------------------------------------------------- */
+
+.gate-locations { display: flex; flex-direction: column; gap: 10px; margin-top: 18px; }
+.gate-locations .btn { width: 100%; padding: 12px; font-size: 14px; }
+
+.gate-back {
+  background: none; border: none; margin-top: 14px; padding: 0;
+  color: var(--muted); font-size: 12px; cursor: pointer;
+}
+.gate-back:hover { color: var(--ink); filter: none; }

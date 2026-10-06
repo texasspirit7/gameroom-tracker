@@ -12,10 +12,12 @@ process.env.DATA_DIR = tempDir;
 process.env.JWT_SECRET = 'test-only-secret';
 
 const { resolveSheetDate } = await import('../routes/sheets.js');
-const { db } = await import('../db.js');
+const { getDb, closeAllDbs } = await import('../db.js');
+const { DEFAULT_LOCATION } = await import('../locations.js');
+const db = getDb(DEFAULT_LOCATION);
 
 after(() => {
-  db.close();
+  closeAllDbs();
   fs.rmSync(tempDir, { recursive: true, force: true });
 });
 

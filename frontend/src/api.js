@@ -49,11 +49,18 @@ export const api = {
 
   authConfig: () => request('/api/auth/config'),
   me: () => request('/api/auth/me'),
-  loginLocal: (name, email) => request('/api/auth/local', { method: 'POST', body: JSON.stringify({ name, email }) }),
-  loginGoogle: (credential) => request('/api/auth/google', { method: 'POST', body: JSON.stringify({ credential }) }),
+  // Two steps: prove who you are, then enter one of the locations you're allowed into.
+  identifyLocal: (name, email) =>
+    request('/api/auth/local', { method: 'POST', body: JSON.stringify({ name, email }) }),
+  identifyGoogle: (credential) =>
+    request('/api/auth/google', { method: 'POST', body: JSON.stringify({ credential }) }),
+  enterLocation: (location) =>
+    request('/api/auth/enter', { method: 'POST', body: JSON.stringify({ location }) }),
   logout: () => request('/api/auth/logout', { method: 'POST' }),
 
   adminUsers: () => request('/api/admin/users'),
+  addUser: (email, name) =>
+    request('/api/admin/users', { method: 'POST', body: JSON.stringify({ email, name }) }),
   approveUser: (id) => request(`/api/admin/users/${id}/approve`, { method: 'POST' }),
   blockUser: (id) => request(`/api/admin/users/${id}/block`, { method: 'POST' }),
   setUserRole: (id, role) => request(`/api/admin/users/${id}/role`, { method: 'POST', body: JSON.stringify({ role }) }),

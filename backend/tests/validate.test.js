@@ -12,11 +12,14 @@ process.env.DATA_DIR = tempDir;
 process.env.JWT_SECRET = 'test-only-secret';
 
 const { validateSheet, computeMeterProfit } = await import('../extract/validate.js');
+const { getDb, closeAllDbs } = await import('../db.js');
+const { DEFAULT_LOCATION } = await import('../locations.js');
+// validateSheet looks up the previous sheet for meter continuity, so it needs a handle.
+const db = getDb(DEFAULT_LOCATION);
 const { normalizeMachines, normalizeExpenses, normalizeSheetDate } = await import('../extract/claudeExtract.js');
-const { db } = await import('../db.js');
 
 after(() => {
-  db.close();
+  closeAllDbs();
   fs.rmSync(tempDir, { recursive: true, force: true });
 });
 
@@ -86,14 +89,14 @@ describe('validateSheet (regression: must not crash on malformed machines shape)
       1: { machine_number: 2, daily_in: 200, daily_out: 75, curr_in: 200, prev_in: 0, curr_out: 75, prev_out: 0 },
     };
     assert.doesNotThrow(() => {
-      const { warnings } = validateSheet({ sheetDate: null, machines: objShaped, totals: { total_in: 300, total_out: 125 } });
+      const { warnings } = validateSheet(db, { sheetDate: null, machines: objShaped, totals: { total_in: 300, total_out: 125 } });
       assert.equal(warnings.length, 0, 'sums match totals, no warnings expected');
     });
   });
 
   test('flags a mismatch between machine daily_in sum and the sheet total_in', () => {
     const machines = [{ machine_number: 1, daily_in: 100, daily_out: 0 }];
-    const { warnings } = validateSheet({ sheetDate: null, machines, totals: { total_in: 999, total_out: 0 } });
+    const { warnings } = validateSheet(db, { sheetDate: null, machines, totals: { total_in: 999, total_out: 0 } });
     assert.ok(warnings.some((w) => w.includes('Daily In sums to')));
   });
 });
@@ -103,7 +106,7 @@ describe('validateSheet (regression: near-empty machine table extraction must be
     // Mirrors a real production case: Claude vision read the sheet totals/expenses
     // correctly but returned only one degenerate machine row instead of the full table.
     const machines = [{ machine_number: 0, prev_in: 0, curr_in: 0, daily_in: 0, prev_out: 0, curr_out: 0, daily_out: 0 }];
-    const { warnings } = validateSheet({ sheetDate: null, machines, totals: { total_in: 4698, total_out: 1448 } });
+    const { warnings } = validateSheet(db, { sheetDate: null, machines, totals: { total_in: 4698, total_out: 1448 } });
     assert.ok(
       warnings[0].includes('Machine table extraction likely failed'),
       'the extraction-failed warning must be present and come first'
@@ -111,7 +114,7 @@ describe('validateSheet (regression: near-empty machine table extraction must be
   });
 
   test('does not fire when there is no real activity to miss (empty sheet, all zero totals)', () => {
-    const { warnings } = validateSheet({ sheetDate: null, machines: [], totals: { total_in: 0, total_out: 0 } });
+    const { warnings } = validateSheet(db, { sheetDate: null, machines: [], totals: { total_in: 0, total_out: 0 } });
     assert.ok(!warnings.some((w) => w.includes('extraction likely failed')));
   });
 
@@ -120,7 +123,7 @@ describe('validateSheet (regression: near-empty machine table extraction must be
       { machine_number: 1, daily_in: 100, daily_out: 50 },
       { machine_number: 2, daily_in: 200, daily_out: 75 },
     ];
-    const { warnings } = validateSheet({ sheetDate: null, machines, totals: { total_in: 300, total_out: 125 } });
+    const { warnings } = validateSheet(db, { sheetDate: null, machines, totals: { total_in: 300, total_out: 125 } });
     assert.ok(!warnings.some((w) => w.includes('extraction likely failed')));
   });
 });

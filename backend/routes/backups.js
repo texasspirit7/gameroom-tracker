@@ -12,13 +12,13 @@ backupsRouter.use(adminGate);
 
 // GET /api/backups — snapshots on disk, newest first
 backupsRouter.get('/', (req, res) => {
-  res.json(listBackups());
+  res.json(listBackups(req.location));
 });
 
 // POST /api/backups — take a snapshot now, outside the daily schedule
 backupsRouter.post('/', (req, res) => {
   try {
-    const name = runBackup({ force: true });
+    const name = runBackup(req.location, { force: true });
     logAudit(req, { action: 'backup-created', detail: name });
     res.json({ ok: true, name });
   } catch (err) {
@@ -33,10 +33,10 @@ backupsRouter.get('/:name', (req, res) => {
   // basename() strips any traversal (../) before it reaches the filesystem; the whitelist
   // then confirms the request names a real snapshot rather than some other file in the dir.
   const safe = path.basename(name);
-  if (!listBackups().some((b) => b.name === safe)) {
+  if (!listBackups(req.location).some((b) => b.name === safe)) {
     return res.status(404).json({ error: 'Backup not found' });
   }
-  const abs = path.join(backupDir(), safe);
+  const abs = path.join(backupDir(req.location), safe);
   if (!fs.existsSync(abs)) return res.status(404).json({ error: 'Backup missing from storage' });
   res.download(abs, safe);
 });

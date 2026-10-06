@@ -5,12 +5,18 @@ import { startTestServer, signInAsAdmin } from './helpers/testServer.js';
 // The test server sets ADMIN_EMAILS='admin@test.local'.
 const SEEDED = 'admin@test.local';
 
-const signIn = (baseUrl, name, email) =>
-  fetch(`${baseUrl}/api/auth/local`, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
+// Returns the raw two-step result so tests can read the cookie and the user together.
+const signIn = async (baseUrl, name, email, location = 'la') => {
+  const idRes = await fetch(`${baseUrl}/api/auth/local`, {
+    method: 'POST', headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ name, email }),
   });
+  const idCookie = idRes.headers.get('set-cookie')?.split(';')[0];
+  return fetch(`${baseUrl}/api/auth/enter`, {
+    method: 'POST', headers: { 'Content-Type': 'application/json', Cookie: idCookie },
+    body: JSON.stringify({ location }),
+  });
+};
 
 // Fields are read individually rather than deep-compared: node:sqlite returns null-prototype
 // rows, which strict deepEqual rejects even when every value matches.
@@ -35,11 +41,15 @@ describe('ADMIN_EMAILS seeds access but must not overrule the admin UI', () => {
 
   test('regression: a demotion made in the UI survives the demoted admin signing in again', async () => {
     // A second admin is needed to do the demoting — you can't demote your own account.
+    // Sign-in only offers locations you're approved for, so the account is granted first.
+    const created = await (await fetch(`${ctx.baseUrl}/api/admin/users`, {
+      method: 'POST', headers: { Cookie: seededCookie, 'Content-Type': 'application/json' },
+      body: JSON.stringify({ email: 'second@test.local', name: 'Second Admin' }),
+    })).json();
     const otherRes = await signIn(ctx.baseUrl, 'Second Admin', 'second@test.local');
     const otherCookie = otherRes.headers.get('set-cookie').split(';')[0];
-    const { user: other } = await otherRes.json();
+    const other = created;
 
-    await fetch(`${ctx.baseUrl}/api/admin/users/${other.id}/approve`, { method: 'POST', headers: { Cookie: seededCookie } });
     await fetch(`${ctx.baseUrl}/api/admin/users/${other.id}/role`, {
       method: 'POST',
       headers: { Cookie: seededCookie, 'Content-Type': 'application/json' },
@@ -70,8 +80,14 @@ describe('ADMIN_EMAILS seeds access but must not overrule the admin UI', () => {
   });
 
   test('an unlisted address is never promoted by signing in, even with no admins left', async () => {
-    ctx.db.exec("UPDATE users SET role = 'user'");
-    await signIn(ctx.baseUrl, 'Second Admin', 'second@test.local');
-    assert.equal(roleOf(ctx, 'second@test.local').role, 'user');
+    // It can't even reach a location until an admin grants access — and when it does, it
+    // arrives as a plain user. ADMIN_EMAILS is the only thing that confers the admin role.
+    const outsider = 'outsider@test.local';
+    await fetch(`${ctx.baseUrl}/api/admin/users`, {
+      method: 'POST', headers: { Cookie: seededCookie, 'Content-Type': 'application/json' },
+      body: JSON.stringify({ email: outsider, name: 'Outsider' }),
+    });
+    await signIn(ctx.baseUrl, 'Outsider', outsider);
+    assert.equal(roleOf(ctx, outsider).role, 'user', 'an unlisted address never becomes admin');
   });
 });

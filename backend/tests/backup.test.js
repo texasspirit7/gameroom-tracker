@@ -38,10 +38,10 @@ after(async () => { await ctx.stop(); });
 
 describe('backup — nightly SQLite snapshots', () => {
   test('a snapshot is a valid database containing the real rows, not an empty file', () => {
-    const name = backup.runBackup({ force: true, now: new Date('2026-02-02T03:00:00Z') });
+    const name = backup.runBackup('la', { force: true, now: new Date('2026-02-02T03:00:00Z') });
     assert.ok(name, 'expected a snapshot filename');
 
-    const snap = new DatabaseSync(path.join(backup.backupDir(), name));
+    const snap = new DatabaseSync(path.join(backup.backupDir('la'), name));
     try {
       const sheets = snap.prepare('SELECT sheet_date, total_in FROM sheets').all();
       assert.equal(sheets.length, 1, 'the uploaded sheet is present in the snapshot');
@@ -57,29 +57,29 @@ describe('backup — nightly SQLite snapshots', () => {
 
   test('a second snapshot is skipped while a recent one exists, unless forced', () => {
     const now = new Date('2026-02-02T04:00:00Z'); // an hour after the snapshot above
-    assert.equal(backup.runBackup({ now }), null, 'should skip — a fresh snapshot already exists');
-    assert.ok(backup.runBackup({ force: true, now }), 'force overrides the freshness check');
+    assert.equal(backup.runBackup('la', { now }), null, 'should skip — a fresh snapshot already exists');
+    assert.ok(backup.runBackup('la', { force: true, now }), 'force overrides the freshness check');
   });
 
   test('two forced snapshots in the same second overwrite rather than throwing (VACUUM INTO wont write over an existing path)', () => {
     const now = new Date('2026-02-02T06:00:00Z');
-    const first = backup.runBackup({ force: true, now });
+    const first = backup.runBackup('la', { force: true, now });
     let second;
-    assert.doesNotThrow(() => { second = backup.runBackup({ force: true, now }); });
+    assert.doesNotThrow(() => { second = backup.runBackup('la', { force: true, now }); });
     assert.equal(second, first, 'same second, same filename');
-    assert.equal(backup.listBackups().filter((b) => b.name === first).length, 1, 'no duplicate entry');
+    assert.equal(backup.listBackups('la').filter((b) => b.name === first).length, 1, 'no duplicate entry');
   });
 
   test('a snapshot is taken once the newest one is a day old', () => {
-    const name = backup.runBackup({ now: new Date('2026-02-03T05:00:00Z') });
+    const name = backup.runBackup('la', { now: new Date('2026-02-03T05:00:00Z') });
     assert.ok(name, 'a day later, the scheduled backup should run');
   });
 
   test('retention prunes the oldest snapshots, keeping the newest 14', () => {
     for (let day = 1; day <= 20; day++) {
-      backup.runBackup({ force: true, now: new Date(`2026-03-${String(day).padStart(2, '0')}T02:00:00Z`) });
+      backup.runBackup('la', { force: true, now: new Date(`2026-03-${String(day).padStart(2, '0')}T02:00:00Z`) });
     }
-    const kept = backup.listBackups();
+    const kept = backup.listBackups('la');
     assert.equal(kept.length, 14);
     // listBackups() is newest-first, so the newest kept is the last day written.
     assert.match(kept[0].name, /2026-03-20/);
@@ -95,7 +95,7 @@ describe('/api/backups — admin-only access to snapshots', () => {
     const create = await fetch(`${ctx.baseUrl}/api/backups`, { method: 'POST', headers: { Cookie: userCookie } });
     assert.equal(create.status, 403);
 
-    const name = backup.listBackups()[0].name;
+    const name = backup.listBackups('la')[0].name;
     const download = await fetch(`${ctx.baseUrl}/api/backups/${name}`, { headers: { Cookie: userCookie } });
     assert.equal(download.status, 403);
   });
@@ -111,20 +111,20 @@ describe('/api/backups — admin-only access to snapshots', () => {
   });
 
   test('admin can take a snapshot on demand', async () => {
-    const before = backup.listBackups().length;
+    const before = backup.listBackups('la').length;
     const res = await fetch(`${ctx.baseUrl}/api/backups`, { method: 'POST', headers: { Cookie: adminCookie } });
     assert.equal(res.status, 200);
     const body = await res.json();
     assert.ok(body.name);
-    assert.ok(backup.listBackups().length >= before, 'the on-demand snapshot exists (retention may cap the count)');
+    assert.ok(backup.listBackups('la').length >= before, 'the on-demand snapshot exists (retention may cap the count)');
   });
 
   test('admin can download a snapshot and gets the actual file bytes', async () => {
-    const name = backup.listBackups()[0].name;
+    const name = backup.listBackups('la')[0].name;
     const res = await fetch(`${ctx.baseUrl}/api/backups/${name}`, { headers: { Cookie: adminCookie } });
     assert.equal(res.status, 200);
     const buf = Buffer.from(await res.arrayBuffer());
-    assert.equal(buf.length, fs.statSync(path.join(backup.backupDir(), name)).size);
+    assert.equal(buf.length, fs.statSync(path.join(backup.backupDir('la'), name)).size);
     assert.equal(buf.subarray(0, 15).toString(), 'SQLite format 3', 'downloaded bytes are a real SQLite file');
   });
 

@@ -1,5 +1,4 @@
 import { Router } from 'express';
-import { db } from '../db.js';
 import { resolveRange } from './range.js';
 
 export const dashboardRouter = Router();
@@ -63,7 +62,7 @@ function bucketLabel(key, g) {
   return shortDate(key);
 }
 
-function aggregate(from, to) {
+function aggregate(db, from, to) {
   const sheets = db.prepare(`
     SELECT id, sheet_date, total_in, total_out, match_amount, meter_profit, cash_profit, over_short
     FROM sheets WHERE sheet_date BETWEEN ? AND ? ORDER BY sheet_date, id
@@ -96,7 +95,7 @@ function aggregate(from, to) {
 }
 
 /** Alerts computed over an aggregated date range. */
-function alertsForRange(from, to, label) {
+function alertsForRange(db, from, to, label) {
   const alerts = [];
   const suffix = label ? ` — ${label}` : '';
 
@@ -162,7 +161,7 @@ const WEEKLY_TREND_WEEKS = 12;
  * a weekly trend would be one point and tell you nothing — so like the Analytics leaderboard,
  * this panel answers a question the range picker isn't asking.
  */
-export function buildWeeklyTrend() {
+export function buildWeeklyTrend(db) {
   // Nothing recorded at all — the chart says so rather than drawing a flat line through
   // twelve empty weeks.
   const dates = [
@@ -248,15 +247,16 @@ export function missingDayAlert(latestDate) {
 
 // GET /api/dashboard?from=YYYY-MM-DD&to=YYYY-MM-DD&label=...
 dashboardRouter.get('/', (req, res) => {
+  const { db } = req;
   const range = resolveRange(req);
-  const { sheets, totals } = aggregate(range.from, range.to);
+  const { sheets, totals } = aggregate(db, range.from, range.to);
 
   let previous = null;
   if (!range.allTime) {
     const span = daysBetween(range.from, range.to);
     const prevTo = addDays(range.from, -1);
     const prevFrom = addDays(prevTo, -(span - 1));
-    const prevAgg = aggregate(prevFrom, prevTo);
+    const prevAgg = aggregate(db, prevFrom, prevTo);
     if (prevAgg.totals.sheet_count > 0) previous = prevAgg.totals;
   }
 
@@ -326,7 +326,7 @@ dashboardRouter.get('/', (req, res) => {
 
 
   // The newest few sheets, for the dashboard's recent-sheets tiles. Built from the rows
-  // aggregate() already fetched (ordered oldest-first) rather than re-querying.
+  // aggregate(db, ) already fetched (ordered oldest-first) rather than re-querying.
   const recentSheets = sheets.slice(-RECENT_SHEET_COUNT).reverse().map((s) => {
     const sheetExpenses = sheetExpenseTotals.get(s.id) || 0;
     return {
@@ -354,7 +354,7 @@ dashboardRouter.get('/', (req, res) => {
 
   const latestDate = db.prepare('SELECT MAX(sheet_date) AS d FROM sheets').get().d;
 
-  const alerts = alertsForRange(range.from, range.to, range.label);
+  const alerts = alertsForRange(db, range.from, range.to, range.label);
   const missing = missingDayAlert(latestDate);
   if (missing) alerts.unshift(missing);
 
@@ -364,7 +364,7 @@ dashboardRouter.get('/', (req, res) => {
     previous,
     chartGranularity: chartGran,
     buckets,
-    weeklyTrend: buildWeeklyTrend(),
+    weeklyTrend: buildWeeklyTrend(db),
     alerts,
     expenses,
     otherExpensesTotal: totals.other_expenses,
@@ -376,6 +376,7 @@ dashboardRouter.get('/', (req, res) => {
 
 // GET /api/machines?from=YYYY-MM-DD&to=YYYY-MM-DD&label=...
 machinesRouter.get('/', (req, res) => {
+  const { db } = req;
   const range = resolveRange(req);
 
   const rows = db.prepare(`
@@ -401,12 +402,14 @@ machinesRouter.get('/', (req, res) => {
 // GET /api/machines/meta — machine-number bounds actually present in the data
 // (used for prev/next navigation; sheets can have any number of machine rows, not just 40)
 machinesRouter.get('/meta', (req, res) => {
+  const { db } = req;
   const row = db.prepare('SELECT MIN(machine_number) AS min, MAX(machine_number) AS max, COUNT(DISTINCT machine_number) AS count FROM machine_readings').get();
   res.json({ min: row.min ?? null, max: row.max ?? null, count: row.count ?? 0 });
 });
 
 // GET /api/machines/:number — full daily history for one machine (not date-range scoped)
 machinesRouter.get('/:number', (req, res) => {
+  const { db } = req;
   const n = Number(req.params.number);
   if (!Number.isInteger(n) || n < 1) return res.status(400).json({ error: 'Invalid machine number' });
 

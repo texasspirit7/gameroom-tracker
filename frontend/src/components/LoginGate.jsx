@@ -42,14 +42,52 @@ export default function LoginGate({ children }) {
 }
 
 function SignInScreen() {
-  const { authProvider } = useAuth();
+  const { authProvider, allowed, pendingApproval, enter, resetIdentity } = useAuth();
+
+  // Identity comes first: the list of locations is specific to who you are, so there is
+  // nothing honest to show until you have said. Nobody is offered a door they can't open.
+  if (allowed === null) {
+    return (
+      <div className="gate-screen">
+        <div className="gate-card">
+          <div className="gate-icon">📊</div>
+          <h2>Sign in</h2>
+          <p className="muted">New accounts need an admin to grant access before they can be used.</p>
+          {authProvider === 'google' ? <GoogleSignInScreen /> : <LocalLoginForm />}
+        </div>
+      </div>
+    );
+  }
+
+  if (allowed.length === 0) {
+    return (
+      <div className="gate-screen">
+        <div className="gate-card">
+          <div className="gate-icon">🔒</div>
+          <h2>{pendingApproval ? 'Waiting for approval' : 'No access yet'}</h2>
+          <p className="muted">
+            {pendingApproval
+              ? 'Your account exists but hasn’t been approved. An admin needs to let you in.'
+              : 'This account hasn’t been given access to anywhere. Ask an admin to add you.'}
+          </p>
+          <button className="gate-back" onClick={resetIdentity}>← not you?</button>
+        </div>
+      </div>
+    );
+  }
+
   return (
     <div className="gate-screen">
       <div className="gate-card">
         <div className="gate-icon">📊</div>
-        <h2>What happened in La</h2>
-        <p className="muted">Sign in to continue. New accounts need admin approval before they can view data.</p>
-        {authProvider === 'google' ? <GoogleSignInScreen /> : <LocalLoginForm />}
+        <h2>Choose a location</h2>
+        <p className="muted">Each one keeps its own records and its own accounts.</p>
+        <div className="gate-locations">
+          {allowed.map((l) => (
+            <button key={l.key} className="btn" onClick={() => enter(l.key)}>{l.label}</button>
+          ))}
+        </div>
+        <button className="gate-back" onClick={resetIdentity}>← not you?</button>
       </div>
     </div>
   );

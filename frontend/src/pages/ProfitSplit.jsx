@@ -5,6 +5,7 @@ import { todayISO } from '../dateRange.js';
 const MONTHS = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
 
 const dayLabel = (iso) => {
+  if (!iso) return '—';
   const [y, m, d] = iso.split('-').map(Number);
   return `${MONTHS[m - 1]} ${d}, ${y}`;
 };
@@ -186,6 +187,7 @@ export default function ProfitSplit() {
 
   const { rows, account } = data;
   const earningWeeks = rows.filter((r) => !r.closed && r.amount_40 > 0).length;
+  const splitLabel = `${Math.round(account.split_a * 100)}/${Math.round(account.split_b * 100)}`;
   const targetPct = account.target
     ? `${Math.min(100, (account.owed_total / account.target) * 100)}%`
     : '0%';
@@ -194,9 +196,12 @@ export default function ProfitSplit() {
     <>
       <h1 className="page-title">Profit Split</h1>
       <div className="page-sub">
-        Weekly net profit (after overhead), split 40/60, with each week running Monday through
-        Sunday. Every week adds to what you’re owed — payments draw down the running balance.
-        Everything up to {dayLabel(account.close_out_date)} was settled separately and is closed.
+        Weekly net profit (after overhead), split {splitLabel}, with each week running Monday
+        through Sunday. Every week adds to what you’re owed — payments draw down the running
+        balance.
+        {account.close_out_date
+          ? ` Everything up to ${dayLabel(account.close_out_date)} was settled separately and is closed.`
+          : ''}
       </div>
       {error && <div className="error-box">{error}</div>}
 
@@ -205,8 +210,11 @@ export default function ProfitSplit() {
           <span className="account-label">Owed to date</span>
           <span className="account-fig">${fmt(account.owed_total)}</span>
           <span className="muted">
-            {earningWeeks === 0 ? 'closed period only'
-              : `closed period + ${earningWeeks} ${earningWeeks === 1 ? 'week' : 'weeks'}`}
+            {(() => {
+              const weeks = `${earningWeeks} ${earningWeeks === 1 ? 'week' : 'weeks'}`;
+              if (!account.close_out_date) return earningWeeks ? weeks : 'nothing yet';
+              return earningWeeks === 0 ? 'closed period only' : `closed period + ${weeks}`;
+            })()}
           </span>
         </div>
         <div className="account-card">
@@ -231,14 +239,16 @@ export default function ProfitSplit() {
         <h2>
           Running total
           <span className="panel-count">
-            ${fmt(account.owed_total)} of ${fmt(account.target)}
+            {account.target ? `$${fmt(account.owed_total)} of $${fmt(account.target)}` : `$${fmt(account.owed_total)} owed to date`}
           </span>
         </h2>
-        <div className="recoup-bar"><i style={{ width: targetPct }} /></div>
+        {account.target && <div className="recoup-bar"><i style={{ width: targetPct }} /></div>}
         <p className="muted recoup-note">
-          {account.target_reached
-            ? `Target reached — $${fmt(account.owed_total)} owed to date.`
-            : `$${fmt(account.target_remaining)} to go. Weeks run Monday to Sunday, splitting 40/60; the first began ${dayLabel(account.first_week_start)}.`}
+          {!account.target
+            ? `Weeks run Monday to Sunday, splitting ${splitLabel}.`
+            : account.target_reached
+              ? `Target reached — $${fmt(account.owed_total)} owed to date.`
+              : `$${fmt(account.target_remaining)} to go. Weeks run Monday to Sunday, splitting ${splitLabel}${account.first_week_start ? `; the first began ${dayLabel(account.first_week_start)}` : ''}.`}
         </p>
       </div>
 

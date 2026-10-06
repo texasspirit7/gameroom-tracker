@@ -1,9 +1,16 @@
 import jwt from 'jsonwebtoken';
 import { OAuth2Client } from 'google-auth-library';
 import { config } from './config.js';
-import { db } from './db.js';
+import { getDb } from './db.js';
+import { isLocation, LOCATION_KEYS } from './locations.js';
 
 const COOKIE_NAME = 'grt_session';
+/**
+ * Short-lived cookie holding a verified identity that has not yet chosen a location. It is
+ * not a session: it grants no access to any data, only the right to name a location you are
+ * already approved for.
+ */
+const IDENTITY_COOKIE = 'grt_identity';
 const googleClient = config.googleClientId ? new OAuth2Client(config.googleClientId) : null;
 
 export async function verifyGoogleCredential(credential) {
@@ -43,10 +50,10 @@ export function verifyLocalCredential({ name, email }) {
 }
 
 /** Approved admins currently on the system — used to decide whether break-glass recovery applies. */
-const adminCount = () =>
+const adminCount = (db) =>
   db.prepare("SELECT COUNT(*) AS n FROM users WHERE role = 'admin' AND status = 'approved'").get().n;
 
-export function findOrCreateUser({ email, name, picture }) {
+export function findOrCreateUser(db, { email, name, picture }) {
   const listedAsAdmin = config.adminEmails.includes(email);
   const existing = db.prepare('SELECT * FROM users WHERE email = ?').get(email);
   if (existing) {
@@ -56,7 +63,7 @@ export function findOrCreateUser({ email, name, picture }) {
     //
     // The single exception is recovery: if no approved admin is left, a listed address can still
     // get back in, so a bad demotion can't lock everyone out of the system permanently.
-    const rescue = listedAsAdmin && adminCount() === 0;
+    const rescue = listedAsAdmin && adminCount(db) === 0;
     db.prepare(
       `UPDATE users SET name = ?, picture = ?,
          role = CASE WHEN ? THEN 'admin' ELSE role END,
@@ -79,8 +86,57 @@ export function findOrCreateUser({ email, name, picture }) {
   return db.prepare('SELECT * FROM users WHERE id = ?').get(result.lastInsertRowid);
 }
 
-export function issueSession(res, user) {
-  const token = jwt.sign({ uid: user.id, email: user.email }, config.jwtSecret, {
+/**
+ * Which locations this email may actually enter.
+ *
+ * Checked across every location's database because the sign-in screen has to offer a choice
+ * before any session exists — the alternative is showing people doors they can't open.
+ *
+ * ADMIN_EMAILS is the bootstrap: without it, a location with no approved users yet could
+ * never gain its first one. It seeds access rather than granting it permanently — see
+ * findOrCreateUser, which only applies the admin role at account creation.
+ */
+export function locationsFor(email) {
+  const addr = (email || '').toLowerCase();
+  if (config.adminEmails.includes(addr)) return LOCATION_KEYS.slice();
+  return LOCATION_KEYS.filter((key) => {
+    const row = getDb(key).prepare('SELECT status FROM users WHERE email = ?').get(addr);
+    return row?.status === 'approved';
+  });
+}
+
+/** Whether this email has an account anywhere that is merely waiting to be approved. */
+export function hasPendingAnywhere(email) {
+  const addr = (email || '').toLowerCase();
+  return LOCATION_KEYS.some((key) => {
+    const row = getDb(key).prepare('SELECT status FROM users WHERE email = ?').get(addr);
+    return row?.status === 'pending';
+  });
+}
+
+export function issueIdentity(res, profile) {
+  const token = jwt.sign({ idn: profile }, config.jwtSecret, { expiresIn: '10m' });
+  res.cookie(IDENTITY_COOKIE, token, {
+    httpOnly: true, sameSite: 'lax', secure: config.isProd, maxAge: 10 * 60 * 1000,
+  });
+}
+
+export function readIdentity(req) {
+  const token = req.cookies?.[IDENTITY_COOKIE];
+  if (!token) return null;
+  try {
+    return jwt.verify(token, config.jwtSecret).idn || null;
+  } catch {
+    return null;
+  }
+}
+
+export function clearIdentity(res) {
+  res.clearCookie(IDENTITY_COOKIE);
+}
+
+export function issueSession(res, user, location) {
+  const token = jwt.sign({ uid: user.id, email: user.email, loc: location }, config.jwtSecret, {
     expiresIn: '30d',
   });
   res.cookie(COOKIE_NAME, token, {
@@ -95,12 +151,12 @@ export function clearSession(res) {
   res.clearCookie(COOKIE_NAME);
 }
 
-export function publicUser(user) {
+export function publicUser(user, location) {
   const { id, email, name, picture, role, status } = user;
   // A flag rather than the owner's address: the client needs to know whether *this* account
   // owns the trail, not who does.
   const isOwner = !config.authEnabled || (email || '').toLowerCase() === config.ownerEmail;
-  return { id, email, name, picture, role, status, isOwner };
+  return { id, email, name, picture, role, status, isOwner, location: location ?? null };
 }
 
 export function requireAuth(req, res, next) {
@@ -113,7 +169,17 @@ export function requireAuth(req, res, next) {
     clearSession(res);
     return res.status(401).json({ error: 'Session expired' });
   }
-  const user = db.prepare('SELECT * FROM users WHERE id = ?').get(payload.uid);
+  // The location is pinned in the session, so a request can only ever reach the database it
+  // signed in to. An unrecognised one is treated as a bad session rather than falling back.
+  const location = payload.loc;
+  if (!isLocation(location)) {
+    clearSession(res);
+    return res.status(401).json({ error: 'Session is for an unknown location — sign in again' });
+  }
+  req.location = location;
+  req.db = getDb(location);
+
+  const user = req.db.prepare('SELECT * FROM users WHERE id = ?').get(payload.uid);
   if (!user) {
     clearSession(res);
     return res.status(401).json({ error: 'Account not found' });

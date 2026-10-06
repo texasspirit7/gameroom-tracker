@@ -11,11 +11,15 @@ const tempDir = fs.mkdtempSync(path.join(os.tmpdir(), 'gameroom-unit-test-'));
 process.env.DATA_DIR = tempDir;
 process.env.JWT_SECRET = 'test-only-secret';
 
-const { mondayOf, CLOSE_OUT_DATE, FIRST_WEEK_START } = await import('../routes/profitSplit.js');
-const { db } = await import('../db.js');
+const { mondayOf } = await import('../routes/profitSplit.js');
+const { LOCATIONS } = await import('../locations.js');
+// The close-out is a fact about La, not about the app.
+const CLOSE_OUT_DATE = LOCATIONS.la.closeOut.date;
+const FIRST_WEEK_START = LOCATIONS.la.closeOut.firstWeek;
+const { closeAllDbs } = await import('../db.js');
 
 after(() => {
-  db.close();
+  closeAllDbs();
   fs.rmSync(tempDir, { recursive: true, force: true });
 });
 

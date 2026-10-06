@@ -1,5 +1,5 @@
 import { config } from './config.js';
-import { db } from './db.js';
+import { closeAllDbs } from './db.js';
 import { createApp } from './app.js';
 import { startBackupSchedule } from './backup.js';
 
@@ -15,8 +15,7 @@ const server = app.listen(config.port, () => {
 function shutdown() {
   server.close(() => {
     try {
-      db.exec('PRAGMA wal_checkpoint(TRUNCATE)');
-      db.close();
+      closeAllDbs();
     } catch (err) {
       console.error('[server] error closing database', err);
     }

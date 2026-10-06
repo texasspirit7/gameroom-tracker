@@ -1,32 +1,15 @@
 import { Router } from 'express';
-import { db } from '../db.js';
+import { locationOf } from '../locations.js';
 import { adminGate } from '../auth.js';
 import { logAudit } from './audit.js';
 
 export const profitSplitRouter = Router();
 
-const SPLIT_A = 0.4; // 40% — our side
-const SPLIT_B = 0.6; // 60%
-
 /**
- * The line drawn under the old arrangement.
- *
- * Everything up to and including this Sunday was settled in one payment and is not
- * recomputed from sheets — it shows as a single closed row whose balance is zero by
- * construction. The $30,000 recoup ended with it: from the following Monday every week
- * splits 40/60 outright, with no 100% phase.
+ * The split terms belong to the location, not to the app: La runs 40/60 with a closed-out
+ * history, H runs 50/50 from its first sheet. Everything below reads them from there rather
+ * than from constants, so adding a location never means editing this file.
  */
-export const CLOSE_OUT_DATE = '2026-08-23';   // a Sunday
-export const CLOSE_OUT_RECEIVED = 7400;
-/**
- * The running target for the 40% side: cumulative amount owed, closed period included, so it
- * tracks the same "Owed to date" figure the page already shows rather than a second,
- * differently-scoped total.
- */
-export const RUNNING_TARGET = 80000;
-
-/** The Monday after the close-out — the first day of the first weekly period. */
-export const FIRST_WEEK_START = '2026-08-24';
 export const CLOSED_PERIOD_KEY = 'closed';
 
 /** Marks the seeded close-out receipt so the one-time insert stays idempotent. */
@@ -86,7 +69,7 @@ export function coverageOf(owed, applied) {
 }
 
 /** Every receipt, newest first. Receipts belong to the account, not to any one period. */
-export function listReceipts() {
+export function listReceipts(db) {
   return db.prepare('SELECT * FROM profit_receipts ORDER BY received_on DESC, id DESC').all();
 }
 
@@ -94,14 +77,16 @@ export function listReceipts() {
  * One-time seed of the close-out payment, so the closed period has a real receipt behind it
  * rather than a number conjured in the UI. Idempotent via created_by.
  */
-export function seedCloseOutReceipt() {
+export function seedCloseOutReceipt(db, loc) {
+  // A location with no history to close out gets no seeded receipt — H starts from zero.
+  if (!loc?.closeOut) return null;
   const existing = db.prepare('SELECT id FROM profit_receipts WHERE created_by = ?').get(CLOSE_OUT_ACTOR);
   if (existing) return existing.id;
   const info = db.prepare(`
     INSERT INTO profit_receipts (received_on, amount, expense_credit, note, created_by)
     VALUES (?, ?, 0, ?, ?)
-  `).run(CLOSE_OUT_DATE, CLOSE_OUT_RECEIVED,
-    `Close-out — everything through ${CLOSE_OUT_DATE} settled`, CLOSE_OUT_ACTOR);
+  `).run(loc.closeOut.date, loc.closeOut.received,
+    `Close-out — everything through ${loc.closeOut.date} settled`, CLOSE_OUT_ACTOR);
   return info.lastInsertRowid;
 }
 
@@ -111,10 +96,24 @@ export function seedCloseOutReceipt() {
  *
  * Shared by the GET route and the CSV export so both compute the split the same way.
  */
-export function buildProfitSplitRows() {
-  // Only sheets from the first weekly period onward are recomputed; earlier ones are inside
-  // the closed period and settled.
+export function buildProfitSplitRows(db, loc) {
+  const SPLIT_A = loc.split.a;
+  const SPLIT_B = loc.split.b;
+  const closeOut = loc.closeOut;
   const WEEK_OF = "date(%COL%, 'weekday 0', '-6 days')";
+
+  // With a close-out, weeks start the Monday after it and everything earlier is settled
+  // history. Without one, they start at the first thing on record — there is nothing behind
+  // them to settle.
+  const closeOutDate = closeOut ? closeOut.date : null;
+  const earliest = [
+    db.prepare('SELECT MIN(sheet_date) AS d FROM sheets').get().d,
+    db.prepare('SELECT MIN(expense_date) AS d FROM other_expenses').get().d,
+  ].filter(Boolean).sort()[0];
+  if (!closeOut && !earliest) return Object.assign([], { owedTotal: 0, receivedTotal: 0, paidThrough: null });
+  const FIRST_WEEK_START = closeOut
+    ? closeOut.firstWeek
+    : db.prepare("SELECT date(?, 'weekday 0', '-6 days') AS wk").get(earliest).wk;
   const meterByWeek = db.prepare(`
     SELECT ${WEEK_OF.replace('%COL%', 'sheet_date')} AS wk, COALESCE(SUM(meter_profit), 0) AS mp
     FROM sheets WHERE sheet_date >= ? GROUP BY wk
@@ -140,7 +139,7 @@ export function buildProfitSplitRows() {
   let receivedTotal = 0;
   for (const r of receipts) {
     const v = receiptTotal(r);
-    if (r.received_on <= CLOSE_OUT_DATE) closedReceived += v;
+    if (closeOutDate && r.received_on <= closeOutDate) closedReceived += v;
     else receivedTotal += v;
   }
 
@@ -150,11 +149,12 @@ export function buildProfitSplitRows() {
 
   // The closed period's owed is defined as whatever was received in it, so its balance is
   // zero by construction — the whole point of closing it out rather than recomputing it.
-  const rows = [{
+  // A location without one has no such row.
+  const rows = closeOut ? [{
     period: CLOSED_PERIOD_KEY,
     closed: true,
     period_start: null,
-    period_end: CLOSE_OUT_DATE,
+    period_end: closeOutDate,
     net_profit: null,
     amount_40: round2(closedReceived),
     amount_60: null,
@@ -162,7 +162,7 @@ export function buildProfitSplitRows() {
     applied: round2(closedReceived),
     coverage: 'covered',
     notes: notesByPeriod.get(CLOSED_PERIOD_KEY) || '',
-  }];
+  }] : [];
 
   // One pool drawn down oldest-first, exactly as before — weeks simply replaced months.
   let pool = receivedTotal;
@@ -209,11 +209,12 @@ export function buildProfitSplitRows() {
   rows.owedTotal = owedTotal;
   rows.receivedTotal = round2(closedReceived + receivedTotal);
   rows.paidThrough = paidThrough;
+  rows.firstWeekStart = FIRST_WEEK_START;
   return rows;
 }
 
 /** Everything owed to date on one side, everything received on the other. */
-export function buildAccountSummary(rows) {
+export function buildAccountSummary(rows, loc) {
   const owedTotal = round2(rows.owedTotal || 0);
   const receivedTotal = round2(rows.receivedTotal || 0);
   return {
@@ -221,13 +222,17 @@ export function buildAccountSummary(rows) {
     received_total: receivedTotal,
     balance: round2(owedTotal - receivedTotal),
     paid_through: rows.paidThrough,
-    target: RUNNING_TARGET,
-    target_remaining: round2(Math.max(0, RUNNING_TARGET - owedTotal)),
-    target_reached: owedTotal >= RUNNING_TARGET,
-    close_out_date: CLOSE_OUT_DATE,
-    first_week_start: FIRST_WEEK_START,
-    split_a: SPLIT_A,
-    split_b: SPLIT_B,
+    // null target means the page simply shows the running total with nothing to measure
+    // it against — H has no goal set, La is working toward $80k.
+    target: loc.runningTarget ?? null,
+    target_remaining: loc.runningTarget ? round2(Math.max(0, loc.runningTarget - owedTotal)) : null,
+    target_reached: loc.runningTarget ? owedTotal >= loc.runningTarget : false,
+    close_out_date: loc.closeOut?.date ?? null,
+    first_week_start: rows.firstWeekStart ?? null,
+    split_a: loc.split.a,
+    split_b: loc.split.b,
+    location: loc.key,
+    location_label: loc.label,
   };
 }
 
@@ -235,8 +240,9 @@ export function buildAccountSummary(rows) {
  * account summary. The summary ships with the rows rather than being derived in the browser
  * so the allocation rules live in exactly one place. */
 profitSplitRouter.get('/', adminGate, (req, res) => {
-  const rows = buildProfitSplitRows();
-  res.json({ rows: [...rows], account: buildAccountSummary(rows) });
+  const loc = locationOf(req.location);
+  const rows = buildProfitSplitRows(req.db, loc);
+  res.json({ rows: [...rows], account: buildAccountSummary(rows, loc) });
 });
 
 const DATE_RE = /^\d{4}-\d{2}-\d{2}$/;
@@ -261,14 +267,14 @@ function readReceiptBody(body) {
 }
 
 /** GET /api/profit-split/receipts — the whole ledger, newest first. */
-profitSplitRouter.get('/receipts', adminGate, (req, res) => res.json(listReceipts()));
+profitSplitRouter.get('/receipts', adminGate, (req, res) => res.json(listReceipts(req.db)));
 
 /** POST /api/profit-split/receipts — record a payment against the running balance. */
 profitSplitRouter.post('/receipts', adminGate, (req, res) => {
   const parsed = readReceiptBody(req.body);
   if (parsed.error) return res.status(400).json({ error: parsed.error });
 
-  const info = db.prepare(`
+  const info = req.db.prepare(`
     INSERT INTO profit_receipts (received_on, amount, expense_credit, note, created_by)
     VALUES (?, ?, ?, ?, ?)
   `).run(parsed.receivedOn, parsed.amount, parsed.expenseCredit, parsed.note, req.user?.email ?? null);
@@ -276,18 +282,18 @@ profitSplitRouter.post('/receipts', adminGate, (req, res) => {
   const total = parsed.amount + parsed.expenseCredit;
   logAudit(req, { action: 'receipt-added', detail: `Received $${total.toFixed(2)} on ${parsed.receivedOn}` });
 
-  return res.status(201).json(db.prepare('SELECT * FROM profit_receipts WHERE id = ?').get(info.lastInsertRowid));
+  return res.status(201).json(req.db.prepare('SELECT * FROM profit_receipts WHERE id = ?').get(info.lastInsertRowid));
 });
 
 /** DELETE /api/profit-split/receipts/:id — remove a receipt; the balance re-derives. */
 profitSplitRouter.delete('/receipts/:id', adminGate, (req, res) => {
-  const row = db.prepare('SELECT * FROM profit_receipts WHERE id = ?').get(Number(req.params.id));
+  const row = req.db.prepare('SELECT * FROM profit_receipts WHERE id = ?').get(Number(req.params.id));
   if (!row) return res.status(404).json({ error: 'Receipt not found' });
   if (row.created_by === CLOSE_OUT_ACTOR) {
     return res.status(400).json({ error: 'The close-out payment is part of the settled history and cannot be deleted.' });
   }
 
-  db.prepare('DELETE FROM profit_receipts WHERE id = ?').run(row.id);
+  req.db.prepare('DELETE FROM profit_receipts WHERE id = ?').run(row.id);
   logAudit(req, {
     action: 'receipt-deleted',
     detail: `Removed $${receiptTotal(row).toFixed(2)} received ${row.received_on}`,
@@ -315,7 +321,7 @@ function readNoteBody(body, existing = null) {
 
 /** GET /api/profit-split/notes — dated notes, newest first. */
 profitSplitRouter.get('/notes', adminGate, (req, res) => {
-  res.json(db.prepare('SELECT * FROM profit_notes ORDER BY note_date DESC, id DESC').all());
+  res.json(req.db.prepare('SELECT * FROM profit_notes ORDER BY note_date DESC, id DESC').all());
 });
 
 /** POST /api/profit-split/notes  { note_date, body } */
@@ -323,18 +329,18 @@ profitSplitRouter.post('/notes', adminGate, (req, res) => {
   const parsed = readNoteBody(req.body);
   if (parsed.error) return res.status(400).json({ error: parsed.error });
 
-  const info = db.prepare(
+  const info = req.db.prepare(
     'INSERT INTO profit_notes (note_date, body, created_by) VALUES (?, ?, ?)'
   ).run(parsed.noteDate, parsed.body, req.user?.email ?? null);
 
   logAudit(req, { action: 'split-note-added', detail: `${parsed.noteDate}: "${snippet(parsed.body)}"` });
-  return res.status(201).json(db.prepare('SELECT * FROM profit_notes WHERE id = ?').get(info.lastInsertRowid));
+  return res.status(201).json(req.db.prepare('SELECT * FROM profit_notes WHERE id = ?').get(info.lastInsertRowid));
 });
 
 /** PATCH /api/profit-split/notes/:id  { note_date?, body? } */
 profitSplitRouter.patch('/notes/:id', adminGate, (req, res) => {
   const id = Number(req.params.id);
-  const existing = db.prepare('SELECT * FROM profit_notes WHERE id = ?').get(id);
+  const existing = req.db.prepare('SELECT * FROM profit_notes WHERE id = ?').get(id);
   if (!existing) return res.status(404).json({ error: 'Note not found' });
 
   const parsed = readNoteBody(req.body, existing);
@@ -346,22 +352,22 @@ profitSplitRouter.patch('/notes/:id', adminGate, (req, res) => {
   if (parsed.body !== existing.body) changes.push(`text "${snippet(existing.body)}" → "${snippet(parsed.body)}"`);
   if (!changes.length) return res.json(existing);
 
-  db.prepare(
+  req.db.prepare(
     "UPDATE profit_notes SET note_date = ?, body = ?, updated_by = ?, updated_at = datetime('now') WHERE id = ?"
   ).run(parsed.noteDate, parsed.body, req.user?.email ?? null, id);
 
   logAudit(req, { action: 'split-note-edited', detail: changes.join('; ') });
-  return res.json(db.prepare('SELECT * FROM profit_notes WHERE id = ?').get(id));
+  return res.json(req.db.prepare('SELECT * FROM profit_notes WHERE id = ?').get(id));
 });
 
 /** DELETE /api/profit-split/notes/:id */
 profitSplitRouter.delete('/notes/:id', adminGate, (req, res) => {
   const id = Number(req.params.id);
   // Read before the delete — afterwards there is nothing left to describe.
-  const existing = db.prepare('SELECT * FROM profit_notes WHERE id = ?').get(id);
+  const existing = req.db.prepare('SELECT * FROM profit_notes WHERE id = ?').get(id);
   if (!existing) return res.status(404).json({ error: 'Note not found' });
 
-  db.prepare('DELETE FROM profit_notes WHERE id = ?').run(id);
+  req.db.prepare('DELETE FROM profit_notes WHERE id = ?').run(id);
   logAudit(req, { action: 'split-note-deleted', detail: `${existing.note_date}: "${snippet(existing.body)}"` });
   return res.json({ ok: true, id });
 });
@@ -373,7 +379,7 @@ profitSplitRouter.patch('/:period', adminGate, (req, res) => {
   if (req.body?.notes === undefined) return res.status(400).json({ error: 'Nothing to update' });
 
   const notes = String(req.body.notes).slice(0, 2000);
-  db.prepare(`
+  req.db.prepare(`
     INSERT INTO profit_splits (period, notes) VALUES (?, ?)
     ON CONFLICT(period) DO UPDATE SET notes = excluded.notes
   `).run(period, notes);

@@ -1,5 +1,4 @@
 import { Router } from 'express';
-import { db } from '../db.js';
 import { ownerGate } from '../auth.js';
 
 export const auditRouter = Router();
@@ -51,7 +50,7 @@ const decorate = (row) => ({ ...row, area: areaOf(row.action), sensitive: isSens
  */
 auditRouter.get('/', ownerGate, (req, res) => {
   const limit = Math.min(Math.max(Number(req.query.limit) || 100, 1), 1000);
-  const rows = db.prepare(`
+  const rows = req.db.prepare(`
     SELECT id, action, sheet_id, sheet_date, actor_email, actor_name, detail, created_at
     FROM audit_log ORDER BY id DESC LIMIT ?
   `).all(limit);
@@ -66,7 +65,7 @@ auditRouter.get('/', ownerGate, (req, res) => {
  * receipt or a role change — leave them empty and carry their context in `detail`.
  */
 export function logAudit(req, { action, sheetId, sheetDate, detail }) {
-  db.prepare(`
+  req.db.prepare(`
     INSERT INTO audit_log (action, sheet_id, sheet_date, actor_email, actor_name, detail)
     VALUES (?, ?, ?, ?, ?, ?)
   `).run(action, sheetId ?? null, sheetDate ?? null, req.user?.email ?? null, req.user?.name ?? null, detail ?? null);

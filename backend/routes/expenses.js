@@ -1,5 +1,4 @@
 import { Router } from 'express';
-import { db } from '../db.js';
 import { logAudit } from './audit.js';
 import { adminGate } from '../auth.js';
 
@@ -13,13 +12,13 @@ expensesRouter.get('/', (req, res) => {
   const from = DATE_RE.test(req.query.from) ? req.query.from : '0001-01-01';
   const to = DATE_RE.test(req.query.to) ? req.query.to : '9999-12-31';
 
-  const sheetRows = db.prepare(`
+  const sheetRows = req.db.prepare(`
     SELECT e.id, s.sheet_date AS date, e.category, e.amount, e.note, e.sheet_id
     FROM expenses e JOIN sheets s ON s.id = e.sheet_id
     WHERE s.sheet_date BETWEEN ? AND ?
   `).all(from, to).map((r) => ({ ...r, source: 'sheet', created_by: null }));
 
-  const otherRows = db.prepare(`
+  const otherRows = req.db.prepare(`
     SELECT id, expense_date AS date, category, amount, note, created_by
     FROM other_expenses WHERE expense_date BETWEEN ? AND ?
   `).all(from, to).map((r) => ({ ...r, source: 'other', sheet_id: null }));
@@ -39,7 +38,7 @@ expensesRouter.post('/', (req, res) => {
   if (!Number.isFinite(amt) || amt <= 0) return res.status(400).json({ error: 'amount must be a positive number' });
 
   const createdBy = req.user?.email || null;
-  const result = db.prepare(
+  const result = req.db.prepare(
     'INSERT INTO other_expenses (expense_date, category, amount, note, created_by) VALUES (?, ?, ?, ?, ?)'
   ).run(expense_date, String(category).trim(), amt, note || null, createdBy);
   logAudit(req, { action: 'expense-added', detail: `${String(category).trim()} $${amt.toLocaleString()} on ${expense_date}` });
@@ -50,7 +49,7 @@ expensesRouter.post('/', (req, res) => {
 // are editable here; a sheet's own expenses are edited via that sheet's detail page.
 expensesRouter.patch('/:id', adminGate, (req, res) => {
   const id = Number(req.params.id);
-  const existing = db.prepare('SELECT * FROM other_expenses WHERE id = ?').get(id);
+  const existing = req.db.prepare('SELECT * FROM other_expenses WHERE id = ?').get(id);
   if (!existing) return res.status(404).json({ error: 'Expense not found (only manually logged entries can be edited here)' });
 
   const { expense_date, category, amount, note } = req.body || {};
@@ -60,7 +59,7 @@ expensesRouter.patch('/:id', adminGate, (req, res) => {
     amount: Number.isFinite(Number(amount)) && Number(amount) > 0 ? Number(amount) : existing.amount,
     note: note !== undefined ? note : existing.note,
   };
-  db.prepare('UPDATE other_expenses SET expense_date = ?, category = ?, amount = ?, note = ? WHERE id = ?')
+  req.db.prepare('UPDATE other_expenses SET expense_date = ?, category = ?, amount = ?, note = ? WHERE id = ?')
     .run(next.expense_date, next.category, next.amount, next.note, id);
   // Both sides recorded: an edited amount is only meaningful against what it used to be.
   logAudit(req, {
@@ -74,8 +73,8 @@ expensesRouter.patch('/:id', adminGate, (req, res) => {
 expensesRouter.delete('/:id', adminGate, (req, res) => {
   const id = Number(req.params.id);
   // Read before the delete — afterwards there is nothing left to describe.
-  const existing = db.prepare('SELECT * FROM other_expenses WHERE id = ?').get(id);
-  const result = db.prepare('DELETE FROM other_expenses WHERE id = ?').run(id);
+  const existing = req.db.prepare('SELECT * FROM other_expenses WHERE id = ?').get(id);
+  const result = req.db.prepare('DELETE FROM other_expenses WHERE id = ?').run(id);
   if (!result.changes) return res.status(404).json({ error: 'Expense not found (only manually logged entries can be deleted here)' });
   logAudit(req, {
     action: 'expense-deleted',

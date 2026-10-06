@@ -132,7 +132,7 @@ function AdminOnly({ children }) {
 function AppShell() {
   const [navOpen, setNavOpen] = useState(false);
   const { pathname } = useLocation();
-  const { isAdmin, isOwner, authEnabled } = useAuth();
+  const { isAdmin, isOwner, authEnabled, locationLabel } = useAuth();
   const showAdminOnly = !authEnabled || isAdmin;
   const showOwnerOnly = !authEnabled || isOwner;
 
@@ -147,17 +147,19 @@ function AppShell() {
           <span />
           <span />
         </button>
-        <span className="mobile-topbar-brand">🎰 La Pryor</span>
+        <span className="mobile-topbar-brand">📊 {locationLabel || 'Tracker'}</span>
       </div>
 
       {navOpen && <div className="sidebar-backdrop" onClick={() => setNavOpen(false)} />}
 
       <aside className={`sidebar ${navOpen ? 'open' : ''}`}>
         <div className="brand">
-          <span className="brand-icon">🎰</span>
+          <span className="brand-icon">📊</span>
           <div>
-            <div className="brand-name">La Pryor</div>
-            <div className="brand-sub">Game Room Tracker</div>
+            {/* Names the location you are actually in. With two of them looking identical
+                apart from the figures, a fixed label would be worse than none. */}
+            <div className="brand-name">{locationLabel || 'Tracker'}</div>
+            <div className="brand-sub">Daily sheets</div>
           </div>
           <button className="sidebar-close" aria-label="Close menu" onClick={() => setNavOpen(false)}>✕</button>
         </div>

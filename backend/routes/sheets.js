@@ -2,7 +2,6 @@ import { Router } from 'express';
 import multer from 'multer';
 import fs from 'node:fs';
 import path from 'node:path';
-import { db } from '../db.js';
 import { logAudit } from './audit.js';
 import { config } from '../config.js';
 import { extractFromXlsx } from '../extract/xlsxExtract.js';
@@ -83,7 +82,7 @@ export function resolveSheetDate({ providedDate, extractedDate, lastSheetDate, t
  * that, a re-upload silently doubles every total that day feeds — dashboard figures, machine
  * meters, and the profit split, which is real money.
  */
-function sheetOnDate(date, exceptId = null) {
+function sheetOnDate(db, date, exceptId = null) {
   return exceptId == null
     ? db.prepare('SELECT id FROM sheets WHERE sheet_date = ? ORDER BY id LIMIT 1').get(date)
     : db.prepare('SELECT id FROM sheets WHERE sheet_date = ? AND id != ? ORDER BY id LIMIT 1').get(date, exceptId);
@@ -101,7 +100,7 @@ function saveUploadedFile(file, sheetDate) {
   return rel;
 }
 
-function persistSheet({ extracted, sheetDate, source, filePath, warnings }) {
+function persistSheet(db, { extracted, sheetDate, source, filePath, warnings }) {
   // Always computed by the app, not trusted from the sheet's own printed
   // "Profit (Loss)" box — that figure is whatever the paper's author
   // calculated by hand and isn't a consistent formula sheet to sheet.
@@ -190,6 +189,7 @@ function persistSheet({ extracted, sheetDate, source, filePath, warnings }) {
 
 // POST /api/sheets/upload  (multipart: file, sheet_date? — auto-detected from the sheet if omitted, else guessed)
 sheetsRouter.post('/upload', upload.single('file'), async (req, res) => {
+  const { db } = req;
   try {
     if (!req.file) return res.status(400).json({ error: 'No file uploaded' });
 
@@ -204,7 +204,7 @@ sheetsRouter.post('/upload', upload.single('file'), async (req, res) => {
     // otherwise spend a Claude vision call only to be rejected.
     const providedDate = req.body.sheet_date;
     if (providedDate && DATE_RE.test(providedDate)) {
-      const clash = sheetOnDate(providedDate);
+      const clash = sheetOnDate(db, providedDate);
       if (clash) return res.status(409).json({ error: duplicateDateError(providedDate, clash) });
     }
 
@@ -221,7 +221,7 @@ sheetsRouter.post('/upload', upload.single('file'), async (req, res) => {
       today: todayISO(),
     });
 
-    const { warnings } = validateSheet({ sheetDate, machines: extracted.machines, totals: extracted.totals });
+    const { warnings } = validateSheet(db, { sheetDate, machines: extracted.machines, totals: extracted.totals });
 
     if (suspiciouslyOld) {
       warnings.unshift(
@@ -253,7 +253,7 @@ sheetsRouter.post('/upload', upload.single('file'), async (req, res) => {
     // Re-checked after resolution, since the date may have come off the sheet or been guessed
     // rather than supplied. Deliberately before the file is written, so a rejected upload
     // leaves nothing behind on disk.
-    const clash = sheetOnDate(sheetDate);
+    const clash = sheetOnDate(db, sheetDate);
     if (clash) {
       const how = dateSource === 'extracted' ? ' That date was read off the sheet itself.'
         : dateSource === 'guessed' ? ' No date was found on the sheet, so that day was inferred from the last sheet on record.'
@@ -263,7 +263,7 @@ sheetsRouter.post('/upload', upload.single('file'), async (req, res) => {
 
     const filePath = saveUploadedFile(req.file, sheetDate);
     const source = isXlsx ? 'xlsx' : 'image';
-    const sheetId = persistSheet({ extracted, sheetDate, source, filePath, warnings });
+    const sheetId = persistSheet(db, { extracted, sheetDate, source, filePath, warnings });
     logAudit(req, { action: 'created', sheetId, sheetDate, detail: `Uploaded (${source})` });
 
     res.json({ sheetId, warnings });
@@ -275,6 +275,7 @@ sheetsRouter.post('/upload', upload.single('file'), async (req, res) => {
 
 // GET /api/sheets
 sheetsRouter.get('/', (req, res) => {
+  const { db } = req;
   const sheets = db.prepare(`
     SELECT s.id, s.sheet_date, s.source, s.total_in, s.total_out, s.match_amount,
            s.meter_profit, s.cash_profit, s.over_short, s.status, s.validation_json, s.created_at,
@@ -301,6 +302,7 @@ sheetsRouter.get('/', (req, res) => {
  * Registered before '/:id' — otherwise Express matches "coverage" as an id.
  */
 sheetsRouter.get('/coverage', (req, res) => {
+  const { db } = req;
   const dates = db.prepare('SELECT DISTINCT sheet_date FROM sheets ORDER BY sheet_date').all().map((r) => r.sheet_date);
   if (dates.length < 2) {
     return res.json({ from: dates[0] ?? null, to: dates[0] ?? null, missing_total: 0, months: [] });
@@ -332,6 +334,7 @@ sheetsRouter.get('/coverage', (req, res) => {
 
 // GET /api/sheets/:id/file — download the originally uploaded image/pdf/xlsx
 sheetsRouter.get('/:id/file', (req, res) => {
+  const { db } = req;
   const sheet = db.prepare('SELECT sheet_date, file_path FROM sheets WHERE id = ?').get(Number(req.params.id));
   if (!sheet?.file_path) return res.status(404).json({ error: 'No file on record for this sheet' });
   const abs = path.join(config.dataDir, sheet.file_path);
@@ -341,6 +344,7 @@ sheetsRouter.get('/:id/file', (req, res) => {
 
 // GET /api/sheets/:id
 sheetsRouter.get('/:id', (req, res) => {
+  const { db } = req;
   const sheet = db.prepare('SELECT * FROM sheets WHERE id = ?').get(Number(req.params.id));
   if (!sheet) return res.status(404).json({ error: 'Sheet not found' });
   const machines = db.prepare('SELECT * FROM machine_readings WHERE sheet_id = ? ORDER BY machine_number').all(sheet.id);
@@ -350,6 +354,7 @@ sheetsRouter.get('/:id', (req, res) => {
 
 // PATCH /api/sheets/:id  — corrections from the Review screen (admin-only once auth is on)
 sheetsRouter.patch('/:id', adminGate, (req, res) => {
+  const { db } = req;
   const id = Number(req.params.id);
   const sheet = db.prepare('SELECT * FROM sheets WHERE id = ?').get(id);
   if (!sheet) return res.status(404).json({ error: 'Sheet not found' });
@@ -365,7 +370,7 @@ sheetsRouter.patch('/:id', adminGate, (req, res) => {
           return res.status(400).json({ error: 'sheet_date must be YYYY-MM-DD' });
         }
         // Editing a date is the other way a day could end up with two sheets.
-        const clash = sheetOnDate(String(fields[key]), id);
+        const clash = sheetOnDate(db, String(fields[key]), id);
         if (clash) {
           return res.status(409).json({ error: duplicateDateError(String(fields[key]), clash) });
         }
@@ -407,7 +412,7 @@ sheetsRouter.patch('/:id', adminGate, (req, res) => {
   // If cash_profit isn't set, leave over_short as whatever it already was (e.g. a value
   // extracted from the sheet's own printed Short/Over box) rather than wiping it to null.
   const overShort = updated.cash_profit != null ? updated.cash_profit - meterProfit : updated.over_short;
-  const { warnings } = validateSheet({
+  const { warnings } = validateSheet(db, {
     sheetDate: updated.sheet_date, machines: rows,
     totals: { total_in: updated.total_in, total_out: updated.total_out },
     excludeSheetId: id,
@@ -429,6 +434,7 @@ sheetsRouter.patch('/:id', adminGate, (req, res) => {
 
 // POST /api/sheets/:id/verify (admin-only once auth is on)
 sheetsRouter.post('/:id/verify', adminGate, (req, res) => {
+  const { db } = req;
   const id = Number(req.params.id);
   const result = db.prepare("UPDATE sheets SET status = 'verified' WHERE id = ?").run(id);
   if (!result.changes) return res.status(404).json({ error: 'Sheet not found' });
@@ -439,6 +445,7 @@ sheetsRouter.post('/:id/verify', adminGate, (req, res) => {
 
 // DELETE /api/sheets/:id (admin-only once auth is on)
 sheetsRouter.delete('/:id', adminGate, (req, res) => {
+  const { db } = req;
   const id = Number(req.params.id);
   const sheet = db.prepare('SELECT sheet_date FROM sheets WHERE id = ?').get(id);
   if (!sheet) return res.status(404).json({ error: 'Sheet not found' });

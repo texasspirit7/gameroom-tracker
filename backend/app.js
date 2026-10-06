@@ -8,6 +8,8 @@ import { sheetsRouter } from './routes/sheets.js';
 import { dashboardRouter, machinesRouter } from './routes/dashboard.js';
 import { expensesRouter } from './routes/expenses.js';
 import { profitSplitRouter, seedCloseOutReceipt } from './routes/profitSplit.js';
+import { LOCATION_KEYS, locationOf, DEFAULT_LOCATION } from './locations.js';
+import { getDb } from './db.js';
 import { analyticsRouter } from './routes/analytics.js';
 import { authRouter, adminRouter } from './routes/auth.js';
 import { auditRouter } from './routes/audit.js';
@@ -18,9 +20,10 @@ import { requireAuth, requireApproved } from './auth.js';
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 
 /** Builds the configured Express app (no listening) — shared by server.js and tests. */
-// The close-out payment is seeded once at boot so the settled history has a real receipt
-// behind it rather than a figure hard-coded into the page.
-seedCloseOutReceipt();
+// Opens every location's database at boot — creating the file and schema for any that don't
+// exist yet — and seeds the close-out payment for those that have one, so the settled history
+// has a real receipt behind it rather than a figure hard-coded into the page.
+for (const key of LOCATION_KEYS) seedCloseOutReceipt(getDb(key), locationOf(key));
 
 export function createApp() {
   const app = express();
@@ -46,6 +49,12 @@ export function createApp() {
       requireAuth(req, res, () => requireApproved(req, res, next));
     });
   } else {
+    // No session means no location on the request — dev runs against the default one.
+    app.use('/api', (req, res, next) => {
+      req.location = DEFAULT_LOCATION;
+      req.db = getDb(DEFAULT_LOCATION);
+      next();
+    });
     console.warn('[server] AUTH DISABLED — running open for local testing (set AUTH_ENABLED=true to enforce sign-in)');
   }
 

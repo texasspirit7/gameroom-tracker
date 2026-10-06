@@ -22,7 +22,9 @@ export async function startTestServer() {
   process.env.NODE_ENV = 'test';
 
   const { createApp } = await import('../../app.js');
-  const { db } = await import('../../db.js');
+  const { getDb, closeAllDbs } = await import('../../db.js');
+  const { DEFAULT_LOCATION } = await import('../../locations.js');
+  const db = getDb(DEFAULT_LOCATION);
   const app = createApp();
 
   const server = await new Promise((resolve) => {
@@ -37,22 +39,39 @@ export async function startTestServer() {
     dataDir: tempDir,
     async stop() {
       await new Promise((resolve) => server.close(resolve));
-      db.close();
+      closeAllDbs();
       fs.rmSync(tempDir, { recursive: true, force: true });
     },
   };
 }
 
 /** Signs in (auto-approved admin, since ADMIN_EMAILS matches) and returns the session cookie header. */
-export async function signInAsAdmin(baseUrl) {
-  const res = await fetch(`${baseUrl}/api/auth/local`, {
+/**
+ * Sign-in is two steps now: prove who you are, then enter a location you're allowed into.
+ * Both cookies matter — the identity one is exchanged for the session one.
+ */
+export async function signIn(baseUrl, credentials, location = 'la') {
+  const idRes = await fetch(`${baseUrl}/api/auth/local`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ name: 'Test Admin', email: 'admin@test.local' }),
+    body: JSON.stringify(credentials),
   });
+  if (!idRes.ok) throw new Error(`identify failed: ${(await idRes.json()).error}`);
+  const idCookie = idRes.headers.get('set-cookie')?.split(';')[0];
+
+  const res = await fetch(`${baseUrl}/api/auth/enter`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', Cookie: idCookie },
+    body: JSON.stringify({ location }),
+  });
+  if (!res.ok) throw new Error(`enter ${location} failed: ${(await res.json()).error}`);
   const cookie = res.headers.get('set-cookie')?.split(';')[0];
   if (!cookie) throw new Error('Sign-in did not return a session cookie');
   return cookie;
+}
+
+export async function signInAsAdmin(baseUrl, location = 'la') {
+  return signIn(baseUrl, { name: 'Test Admin', email: 'admin@test.local' }, location);
 }
 
 /**
@@ -60,35 +79,21 @@ export async function signInAsAdmin(baseUrl) {
  * account is 'approved' (not 'pending') — for testing the admin-only
  * *authorization* boundary specifically, not the separate approval gate.
  */
-export async function signInAsApprovedUser(baseUrl, adminCookie, email = 'user@test.local') {
-  const signInRes = await fetch(`${baseUrl}/api/auth/local`, {
+export async function signInAsApprovedUser(baseUrl, adminCookie, email = 'user@test.local', location = 'la') {
+  // The order is now the other way round: sign-in only offers locations you're already
+  // approved for, so an admin has to grant access before the account can get in at all.
+  await fetch(`${baseUrl}/api/admin/users`, {
     method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ name: 'Test User', email }),
+    headers: { 'Content-Type': 'application/json', Cookie: adminCookie },
+    body: JSON.stringify({ email, name: 'Test User' }),
   });
-  const cookie = signInRes.headers.get('set-cookie')?.split(';')[0];
-  if (!cookie) throw new Error('Sign-in did not return a session cookie');
-  const { user } = await signInRes.json();
-
-  await fetch(`${baseUrl}/api/admin/users/${user.id}/approve`, {
-    method: 'POST',
-    headers: { Cookie: adminCookie },
-  });
-
-  return cookie;
+  return signIn(baseUrl, { name: 'Test User', email }, location);
 }
 
 /**
  * Signs in the account that owns the Activity trail. Separate from signInAsAdmin so tests can
  * tell the admin boundary and the owner boundary apart.
  */
-export async function signInAsOwner(baseUrl) {
-  const res = await fetch(`${baseUrl}/api/auth/local`, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ name: 'Test Owner', email: 'owner@test.local' }),
-  });
-  const cookie = res.headers.get('set-cookie')?.split(';')[0];
-  if (!cookie) throw new Error('Sign-in did not return a session cookie');
-  return cookie;
+export async function signInAsOwner(baseUrl, location = 'la') {
+  return signIn(baseUrl, { name: 'Test Owner', email: 'owner@test.local' }, location);
 }

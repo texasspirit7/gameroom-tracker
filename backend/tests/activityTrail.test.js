@@ -95,7 +95,7 @@ describe('money changes are recorded', () => {
   test('signing in is logged', async () => {
     const entry = entriesFor(await trail(), 'signed-in')[0];
     assert.ok(entry, 'expected a signed-in entry');
-    assert.match(entry.detail, /local sign-in/);
+    assert.match(entry.detail, /Signed in to /);
   });
 });
 
@@ -128,7 +128,8 @@ describe('entries carry an area, and the sensitive ones are flagged', () => {
 
   test('an unmapped action falls back to "other" rather than vanishing', async () => {
     const { logAudit } = await import('../routes/audit.js');
-    logAudit({ user: { email: 'someone@test.local' } }, { action: 'brand-new-thing' });
+    const { getDb } = await import('../db.js');
+    logAudit({ user: { email: 'someone@test.local' }, db: getDb('la') }, { action: 'brand-new-thing' });
     const entry = entriesFor(await trail(), 'brand-new-thing')[0];
     assert.ok(entry, 'the entry is still returned');
     assert.equal(entry.area, 'other');

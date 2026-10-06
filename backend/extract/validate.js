@@ -1,4 +1,3 @@
-import { db } from '../db.js';
 import { normalizeMachines } from './claudeExtract.js';
 
 const near = (a, b, tol = 1) => Math.abs((a ?? 0) - (b ?? 0)) <= tol;
@@ -7,7 +6,7 @@ const near = (a, b, tol = 1) => Math.abs((a ?? 0) - (b ?? 0)) <= tol;
  * Validate an extracted sheet against its own totals and against the
  * previous sheet's meters. Returns { warnings: [] }.
  */
-export function validateSheet({ sheetDate, machines, totals, excludeSheetId }) {
+export function validateSheet(db, { sheetDate, machines, totals, excludeSheetId }) {
   const warnings = [];
   const rows = normalizeMachines(machines);
 

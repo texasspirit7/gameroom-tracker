@@ -1,6 +1,7 @@
 import fs from 'node:fs';
 import path from 'node:path';
-import { db } from './db.js';
+import { getDb } from './db.js';
+import { LOCATION_KEYS, DEFAULT_LOCATION } from './locations.js';
 import { config } from './config.js';
 
 /**
@@ -21,7 +22,25 @@ const RETAIN = 14;                          // keep two weeks of daily snapshots
 const INTERVAL_MS = 24 * 60 * 60 * 1000;    // once a day
 const MIN_AGE_MS = 20 * 60 * 60 * 1000;     // skip a boot-time backup if one is already this fresh
 
-export const backupDir = () => path.join(config.dataDir, BACKUP_DIR_NAME);
+/**
+ * One folder per location. The original install kept its snapshots flat in backups/; those
+ * belong to the default location, so they are moved under it once rather than left behind
+ * where nothing would ever list them again.
+ */
+export const backupDir = (location) => path.join(config.dataDir, BACKUP_DIR_NAME, location);
+
+let migrated = false;
+function migrateLegacyFlatBackups() {
+  if (migrated) return;
+  migrated = true;
+  const flat = path.join(config.dataDir, BACKUP_DIR_NAME);
+  if (!fs.existsSync(flat)) return;
+  const stale = fs.readdirSync(flat).filter((f) => FILE_RE.test(f));
+  if (!stale.length) return;
+  const dest = backupDir(DEFAULT_LOCATION);
+  fs.mkdirSync(dest, { recursive: true });
+  for (const f of stale) fs.renameSync(path.join(flat, f), path.join(dest, f));
+}
 
 /** Snapshot filenames are timestamped, so lexical order is chronological order. */
 const stampFor = (date) => date.toISOString().replace(/[:.]/g, '-').slice(0, 19);
@@ -40,8 +59,9 @@ function stampToISO(stamp) {
 }
 
 /** Existing snapshots, newest first. */
-export function listBackups() {
-  const dir = backupDir();
+export function listBackups(location) {
+  migrateLegacyFlatBackups();
+  const dir = backupDir(location);
   if (!fs.existsSync(dir)) return [];
   return fs.readdirSync(dir)
     .map((name) => ({ name, match: FILE_RE.exec(name) }))
@@ -54,9 +74,9 @@ export function listBackups() {
     .sort((a, b) => (a.name < b.name ? 1 : -1));
 }
 
-function prune() {
-  for (const stale of listBackups().slice(RETAIN)) {
-    fs.rmSync(path.join(backupDir(), stale.name), { force: true });
+function prune(location) {
+  for (const stale of listBackups(location).slice(RETAIN)) {
+    fs.rmSync(path.join(backupDir(location), stale.name), { force: true });
   }
 }
 
@@ -64,12 +84,13 @@ function prune() {
  * Writes one snapshot and prunes old ones. Returns the snapshot's filename.
  * Pass force=true to snapshot regardless of how recent the last one is.
  */
-export function runBackup({ force = false, now = new Date() } = {}) {
-  const dir = backupDir();
+export function runBackup(location, { force = false, now = new Date() } = {}) {
+  migrateLegacyFlatBackups();
+  const dir = backupDir(location);
   fs.mkdirSync(dir, { recursive: true });
 
   if (!force) {
-    const [latest] = listBackups();
+    const [latest] = listBackups(location);
     if (latest && now.getTime() - Date.parse(latest.created_at) < MIN_AGE_MS) return null;
   }
 
@@ -80,8 +101,8 @@ export function runBackup({ force = false, now = new Date() } = {}) {
   // Replacing is harmless: it's a snapshot of the same database at the same second.
   fs.rmSync(dest, { force: true });
   // Single-quoted SQL string literal; the stamp is generated from a Date, never user input.
-  db.exec(`VACUUM INTO '${dest.replace(/'/g, "''")}'`);
-  prune();
+  getDb(location).exec(`VACUUM INTO '${dest.replace(/'/g, "''")}'`);
+  prune(location);
   return name;
 }
 
@@ -89,8 +110,15 @@ export function runBackup({ force = false, now = new Date() } = {}) {
 export function startBackupSchedule() {
   const attempt = () => {
     try {
-      const name = runBackup();
-      if (name) console.log(`[backup] wrote ${name}`);
+      // Each location is attempted on its own, so one failing doesn't skip the others.
+      for (const location of LOCATION_KEYS) {
+        try {
+          const name = runBackup(location);
+          if (name) console.log(`[backup] ${location}: wrote ${name}`);
+        } catch (err) {
+          console.error(`[backup] ${location} failed:`, err.message);
+        }
+      }
     } catch (err) {
       // A failed backup must never take the app down with it.
       console.error('[backup] failed:', err.message);
