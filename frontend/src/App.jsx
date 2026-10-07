@@ -18,6 +18,7 @@ import AdminUsers from './pages/AdminUsers.jsx';
 import ProfitSplit from './pages/ProfitSplit.jsx';
 import Analytics from './pages/Analytics.jsx';
 import Activity from './pages/Activity.jsx';
+import Investment from './pages/Investment.jsx';
 
 const NAV = [
   { to: '/', label: 'Dashboard', icon: '📊', end: true },
@@ -28,6 +29,7 @@ const NAV = [
   { to: '/admin', label: 'Admin — Users', icon: '🛡️', adminOnly: true },
   { to: '/profit-split', label: 'Profit Split', icon: '🤝', adminOnly: true },
   { to: '/analytics', label: 'Analytics', icon: '🔍', adminOnly: true },
+  { to: '/investment', label: 'Investment', icon: '🏗️', adminOnly: true, investmentOnly: true },
   { to: '/activity', label: 'Activity', icon: '📜', ownerOnly: true },
 ];
 
@@ -132,7 +134,7 @@ function AdminOnly({ children }) {
 function AppShell() {
   const [navOpen, setNavOpen] = useState(false);
   const { pathname } = useLocation();
-  const { isAdmin, isOwner, authEnabled, locationLabel } = useAuth();
+  const { isAdmin, isOwner, authEnabled, locationLabel, hasInvestment } = useAuth();
   const showAdminOnly = !authEnabled || isAdmin;
   const showOwnerOnly = !authEnabled || isOwner;
 
@@ -164,7 +166,9 @@ function AppShell() {
           <button className="sidebar-close" aria-label="Close menu" onClick={() => setNavOpen(false)}>✕</button>
         </div>
         <nav>
-          {NAV.filter((item) => (!item.adminOnly || showAdminOnly) && (!item.ownerOnly || showOwnerOnly)).map((item) => (
+          {NAV.filter((item) => (!item.adminOnly || showAdminOnly)
+            && (!item.ownerOnly || showOwnerOnly)
+            && (!item.investmentOnly || hasInvestment)).map((item) => (
             <NavLink key={item.to} to={item.to} end={item.end}>
               <span className="nav-icon">{item.icon}</span>
               {item.label}
@@ -188,6 +192,7 @@ function AppShell() {
           <Route path="/admin" element={<AdminOnly><AdminUsers /></AdminOnly>} />
           <Route path="/profit-split" element={<AdminOnly><ProfitSplit /></AdminOnly>} />
           <Route path="/analytics" element={<AdminOnly><Analytics /></AdminOnly>} />
+          <Route path="/investment" element={<AdminOnly><Investment /></AdminOnly>} />
           <Route path="/activity" element={<OwnerOnly><Activity /></OwnerOnly>} />
         </Routes>
       </main>

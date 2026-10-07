@@ -166,7 +166,10 @@ describe('each location keeps its own split terms', () => {
     const { rows, account } = await (await fetch(`${ctx.baseUrl}/api/profit-split`, { headers: { Cookie: h } })).json();
     assert.equal(account.split_a, 0.5);
     assert.equal(account.split_b, 0.5);
-    assert.equal(account.target, 175000, 'H has its own target');
+    // The target is what has actually been released toward the setup, so with nothing
+    // released yet there is nothing to recover.
+    assert.equal(account.target, null, 'no disbursements yet, so no target');
+    assert.equal(account.target_is_investment, true);
     assert.equal(account.close_out_date, null);
     assert.equal(rows.some((r) => r.closed), false, 'H has no closed period');
   });

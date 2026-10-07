@@ -134,6 +134,7 @@ export function AuthProvider({ children }) {
       allowed, pendingApproval, enter, resetIdentity,
       // Which location this session is in — the shell names it so the two can't be confused.
       locationLabel: locationNames[user?.location] || null,
+      hasInvestment: Boolean(user?.hasInvestment),
     }}>
       {children}
     </AuthContext.Provider>

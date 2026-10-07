@@ -8,6 +8,7 @@ import { sheetsRouter } from './routes/sheets.js';
 import { dashboardRouter, machinesRouter } from './routes/dashboard.js';
 import { expensesRouter } from './routes/expenses.js';
 import { profitSplitRouter, seedCloseOutReceipt } from './routes/profitSplit.js';
+import { investmentRouter, seedInvestmentBudget } from './routes/investment.js';
 import { LOCATION_KEYS, locationOf, DEFAULT_LOCATION } from './locations.js';
 import { getDb } from './db.js';
 import { analyticsRouter } from './routes/analytics.js';
@@ -23,7 +24,11 @@ const __dirname = path.dirname(fileURLToPath(import.meta.url));
 // Opens every location's database at boot — creating the file and schema for any that don't
 // exist yet — and seeds the close-out payment for those that have one, so the settled history
 // has a real receipt behind it rather than a figure hard-coded into the page.
-for (const key of LOCATION_KEYS) seedCloseOutReceipt(getDb(key), locationOf(key));
+for (const key of LOCATION_KEYS) {
+  const db = getDb(key);
+  seedCloseOutReceipt(db, locationOf(key));
+  seedInvestmentBudget(db, locationOf(key));
+}
 
 export function createApp() {
   const app = express();
@@ -63,6 +68,7 @@ export function createApp() {
   app.use('/api/machines', machinesRouter);
   app.use('/api/expenses', expensesRouter);
   app.use('/api/profit-split', profitSplitRouter);
+  app.use('/api/investment', investmentRouter);
   app.use('/api/analytics', analyticsRouter);
   app.use('/api/audit', auditRouter);
   app.use('/api/export', exportRouter);

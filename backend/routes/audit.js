@@ -22,6 +22,9 @@ const AREA_BY_ACTION = {
   'split-note-added': 'split',
   'split-note-edited': 'split',
   'split-note-deleted': 'split',
+  'investment-released': 'investment',
+  'investment-edited': 'investment',
+  'investment-deleted': 'investment',
   created: 'sheets',
   edited: 'sheets',
   verified: 'sheets',
@@ -35,7 +38,7 @@ const AREA_BY_ACTION = {
   'signed-in': 'system',
 };
 
-const SENSITIVE_AREAS = new Set(['users', 'split']);
+const SENSITIVE_AREAS = new Set(['users', 'split', 'investment']);
 
 export const areaOf = (action) => AREA_BY_ACTION[action] || 'other';
 export const isSensitive = (action) => SENSITIVE_AREAS.has(areaOf(action));

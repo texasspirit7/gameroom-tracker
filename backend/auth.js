@@ -2,7 +2,7 @@ import jwt from 'jsonwebtoken';
 import { OAuth2Client } from 'google-auth-library';
 import { config } from './config.js';
 import { getDb } from './db.js';
-import { isLocation, LOCATION_KEYS } from './locations.js';
+import { isLocation, LOCATION_KEYS, locationOf } from './locations.js';
 
 const COOKIE_NAME = 'grt_session';
 /**
@@ -156,7 +156,12 @@ export function publicUser(user, location) {
   // A flag rather than the owner's address: the client needs to know whether *this* account
   // owns the trail, not who does.
   const isOwner = !config.authEnabled || (email || '').toLowerCase() === config.ownerEmail;
-  return { id, email, name, picture, role, status, isOwner, location: location ?? null };
+  return {
+    id, email, name, picture, role, status, isOwner,
+    location: location ?? null,
+    // Only a location with setup costs to recover shows the Investment page.
+    hasInvestment: Boolean(locationOf(location)?.investment),
+  };
 }
 
 export function requireAuth(req, res, next) {

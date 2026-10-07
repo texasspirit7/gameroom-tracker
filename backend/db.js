@@ -150,7 +150,32 @@ function applySchema(db) {
       updated_at TEXT
     );
 
-    -- Who did what to a sheet, and when — sheet_id/sheet_date are kept even after a
+    -- What the setup was quoted at, one row per line of the estimate. Seeded from the location
+  -- config and editable afterwards, so a changed price is corrected here rather than in code.
+  CREATE TABLE IF NOT EXISTS investment_budget (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    line_no INTEGER NOT NULL,
+    item TEXT NOT NULL,
+    qty REAL,
+    price_each REAL,
+    amount REAL NOT NULL DEFAULT 0
+  );
+
+  -- Money actually released against the setup. Separate from the budget for the same reason
+  -- receipts are separate from the split: one is the plan, the other is what happened.
+  CREATE TABLE IF NOT EXISTS investment_disbursements (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    released_on TEXT NOT NULL,                      -- YYYY-MM-DD
+    amount REAL NOT NULL DEFAULT 0,
+    budget_id INTEGER REFERENCES investment_budget(id) ON DELETE SET NULL,
+    note TEXT,
+    created_by TEXT,
+    created_at TEXT NOT NULL DEFAULT (datetime('now')),
+    updated_by TEXT,
+    updated_at TEXT
+  );
+
+  -- Who did what to a sheet, and when — sheet_id/sheet_date are kept even after a
     -- delete (denormalized, not a foreign key) so the trail survives the sheet itself.
     CREATE TABLE IF NOT EXISTS audit_log (
       id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -169,6 +194,7 @@ function applySchema(db) {
     CREATE INDEX IF NOT EXISTS idx_other_expenses_date ON other_expenses(expense_date);
     CREATE INDEX IF NOT EXISTS idx_audit_log_created ON audit_log(created_at);
     CREATE INDEX IF NOT EXISTS idx_profit_notes_date ON profit_notes(note_date);
+  CREATE INDEX IF NOT EXISTS idx_disbursements_date ON investment_disbursements(released_on);
   `);
 
   // One-time data fix: the sheet's "FD" row (Family Dollar store) was previously

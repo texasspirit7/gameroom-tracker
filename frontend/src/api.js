@@ -76,6 +76,12 @@ export const api = {
   deleteProfitReceipt: (id) => request(`/api/profit-split/receipts/${id}`, { method: 'DELETE' }),
 
   // Dated free-text notes on the Profit Split page — standalone, not tied to a week.
+  investment: () => request('/api/investment'),
+  releaseFunds: (body) => request('/api/investment/disbursements', { method: 'POST', body: JSON.stringify(body) }),
+  updateRelease: (id, body) =>
+    request(`/api/investment/disbursements/${id}`, { method: 'PATCH', body: JSON.stringify(body) }),
+  deleteRelease: (id) => request(`/api/investment/disbursements/${id}`, { method: 'DELETE' }),
+
   profitNotes: () => request('/api/profit-split/notes'),
   addProfitNote: (body) => request('/api/profit-split/notes', { method: 'POST', body: JSON.stringify(body) }),
   updateProfitNote: (id, body) =>

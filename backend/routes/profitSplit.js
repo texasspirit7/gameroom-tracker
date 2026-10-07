@@ -1,5 +1,6 @@
 import { Router } from 'express';
 import { locationOf } from '../locations.js';
+import { releasedTotal } from '../investmentTotals.js';
 import { adminGate } from '../auth.js';
 import { logAudit } from './audit.js';
 
@@ -214,7 +215,10 @@ export function buildProfitSplitRows(db, loc) {
 }
 
 /** Everything owed to date on one side, everything received on the other. */
-export function buildAccountSummary(rows, loc) {
+export function buildAccountSummary(rows, loc, db) {
+  // A location funded by a setup investment recovers what was actually released, not a figure
+  // guessed up front — so the target follows the disbursements rather than a constant.
+  const target = loc.investment && db ? releasedTotal(db) || null : loc.runningTarget ?? null;
   const owedTotal = round2(rows.owedTotal || 0);
   const receivedTotal = round2(rows.receivedTotal || 0);
   return {
@@ -224,9 +228,11 @@ export function buildAccountSummary(rows, loc) {
     paid_through: rows.paidThrough,
     // null target means the page simply shows the running total with nothing to measure
     // it against — H has no goal set, La is working toward $80k.
-    target: loc.runningTarget ?? null,
-    target_remaining: loc.runningTarget ? round2(Math.max(0, loc.runningTarget - owedTotal)) : null,
-    target_reached: loc.runningTarget ? owedTotal >= loc.runningTarget : false,
+    target,
+    target_remaining: target ? round2(Math.max(0, target - owedTotal)) : null,
+    target_reached: target ? owedTotal >= target : false,
+    // Tells the page whether the target is a recovery figure or a plain goal.
+    target_is_investment: Boolean(loc.investment),
     close_out_date: loc.closeOut?.date ?? null,
     first_week_start: rows.firstWeekStart ?? null,
     split_a: loc.split.a,
@@ -242,7 +248,7 @@ export function buildAccountSummary(rows, loc) {
 profitSplitRouter.get('/', adminGate, (req, res) => {
   const loc = locationOf(req.location);
   const rows = buildProfitSplitRows(req.db, loc);
-  res.json({ rows: [...rows], account: buildAccountSummary(rows, loc) });
+  res.json({ rows: [...rows], account: buildAccountSummary(rows, loc, req.db) });
 });
 
 const DATE_RE = /^\d{4}-\d{2}-\d{2}$/;
