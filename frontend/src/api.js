@@ -81,6 +81,8 @@ export const api = {
   updateRelease: (id, body) =>
     request(`/api/investment/disbursements/${id}`, { method: 'PATCH', body: JSON.stringify(body) }),
   deleteRelease: (id) => request(`/api/investment/disbursements/${id}`, { method: 'DELETE' }),
+  addBudgetLine: (body) => request('/api/investment/budget', { method: 'POST', body: JSON.stringify(body) }),
+  deleteBudgetLine: (id) => request(`/api/investment/budget/${id}`, { method: 'DELETE' }),
 
   profitNotes: () => request('/api/profit-split/notes'),
   addProfitNote: (body) => request('/api/profit-split/notes', { method: 'POST', body: JSON.stringify(body) }),

@@ -25,6 +25,8 @@ const AREA_BY_ACTION = {
   'investment-released': 'investment',
   'investment-edited': 'investment',
   'investment-deleted': 'investment',
+  'investment-budget-added': 'investment',
+  'investment-budget-removed': 'investment',
   created: 'sheets',
   edited: 'sheets',
   verified: 'sheets',

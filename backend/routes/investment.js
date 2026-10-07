@@ -107,6 +107,68 @@ investmentRouter.get('/', adminGate, (req, res) => {
   return res.json(buildInvestment(req.db, loc, rows.owedTotal || 0));
 });
 
+/**
+ * POST /api/investment/budget  { item, qty?, price_each?, amount? }
+ *
+ * For costs that turn up after the estimate was drawn. The line number is assigned rather than
+ * supplied, so added items simply continue the list.
+ *
+ * Amount is derived from quantity × price when both are given — a line that disagrees with its
+ * own arithmetic is worse than one with no detail at all.
+ */
+investmentRouter.post('/budget', adminGate, (req, res) => {
+  const loc = locationOf(req.location);
+  if (!loc?.investment) return res.status(404).json({ error: 'No setup investment is tracked for this location.' });
+
+  const item = String(req.body?.item || '').trim();
+  if (!item) return res.status(400).json({ error: 'Describe what the item is' });
+
+  const num = (v) => (v === undefined || v === null || v === '' ? null : Number(v));
+  const qty = num(req.body?.qty);
+  const each = num(req.body?.price_each);
+  if ([qty, each].some((v) => v !== null && (!Number.isFinite(v) || v < 0))) {
+    return res.status(400).json({ error: 'Quantity and price must be non-negative numbers' });
+  }
+
+  const derived = qty !== null && each !== null ? qty * each : num(req.body?.amount);
+  if (!Number.isFinite(derived) || derived <= 0) {
+    return res.status(400).json({ error: 'Enter an amount, or a quantity and price to work it out from' });
+  }
+  const amount = round2(derived);
+
+  const { next } = req.db.prepare('SELECT COALESCE(MAX(line_no), 0) + 1 AS next FROM investment_budget').get();
+  const info = req.db.prepare(
+    'INSERT INTO investment_budget (line_no, item, qty, price_each, amount) VALUES (?, ?, ?, ?, ?)'
+  ).run(next, item, qty, each, amount);
+
+  logAudit(req, { action: 'investment-budget-added', detail: `${item} — ${money(amount)}` });
+  res.status(201).json(req.db.prepare('SELECT * FROM investment_budget WHERE id = ?').get(info.lastInsertRowid));
+});
+
+/**
+ * DELETE /api/investment/budget/:id — for a line added by mistake.
+ *
+ * Refused once money has been released against it: removing it would quietly detach the
+ * disbursements from what they were for, and the released total would no longer add up to
+ * anything the budget explains.
+ */
+investmentRouter.delete('/budget/:id', adminGate, (req, res) => {
+  const id = Number(req.params.id);
+  const line = req.db.prepare('SELECT * FROM investment_budget WHERE id = ?').get(id);
+  if (!line) return res.status(404).json({ error: 'Budget line not found' });
+
+  const { n } = req.db.prepare('SELECT COUNT(*) AS n FROM investment_disbursements WHERE budget_id = ?').get(id);
+  if (n > 0) {
+    return res.status(409).json({
+      error: `${n} disbursement${n === 1 ? '' : 's'} already booked against this line — reassign or remove ${n === 1 ? 'it' : 'them'} first.`,
+    });
+  }
+
+  req.db.prepare('DELETE FROM investment_budget WHERE id = ?').run(id);
+  logAudit(req, { action: 'investment-budget-removed', detail: `${line.item} — ${money(line.amount)}` });
+  res.json({ ok: true, id });
+});
+
 /** POST /api/investment/disbursements — record money released. */
 investmentRouter.post('/disbursements', adminGate, (req, res) => {
   const loc = locationOf(req.location);

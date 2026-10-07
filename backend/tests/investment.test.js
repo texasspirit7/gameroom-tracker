@@ -180,3 +180,74 @@ describe('editing and removing disbursements', () => {
     assert.equal(res.status, 404);
   });
 });
+
+describe('adding budget lines for late items', () => {
+  const addLine = (body) =>
+    fetch(`${ctx.baseUrl}/api/investment/budget`, {
+      method: 'POST', headers: { Cookie: h, 'Content-Type': 'application/json' },
+      body: JSON.stringify(body),
+    });
+
+  test('a new item continues the numbering and raises the quoted total', async () => {
+    const before = (await get()).summary.quoted;
+    const res = await addLine({ item: 'Extra bill validator', qty: 2, price_each: 450 });
+    assert.equal(res.status, 201);
+    const line = await res.json();
+    assert.equal(line.line_no, 13, 'continues after the twelve seeded lines');
+    assert.equal(line.amount, 900, 'worked out from quantity × price');
+    assert.equal((await get()).summary.quoted, before + 900);
+  });
+
+  test('an amount can be given directly when there is no unit price', async () => {
+    const line = await (await addLine({ item: 'Permit fees', amount: 325 })).json();
+    assert.equal(line.amount, 325);
+    assert.equal(line.qty, null);
+  });
+
+  test('a line with no amount and no way to work one out is refused', async () => {
+    assert.equal((await addLine({ item: 'Something' })).status, 400);
+    assert.equal((await addLine({ item: '', amount: 100 })).status, 400);
+    assert.equal((await addLine({ item: 'Bad', qty: -1, price_each: 10 })).status, 400);
+  });
+
+  test('a mistaken line can be removed', async () => {
+    const line = await (await addLine({ item: 'Typo', amount: 50 })).json();
+    const res = await fetch(`${ctx.baseUrl}/api/investment/budget/${line.id}`, {
+      method: 'DELETE', headers: { Cookie: h },
+    });
+    assert.equal(res.status, 200);
+    assert.equal((await get()).budget.some((b) => b.id === line.id), false);
+  });
+
+  // Removing it would detach the money from what it was for, and the released total would no
+  // longer add up to anything the budget explains.
+  test('a line with money against it cannot be removed', async () => {
+    const line = await (await addLine({ item: 'Signage', amount: 1200 })).json();
+    await release({ released_on: '2026-10-10', amount: 400, budget_id: line.id });
+
+    const res = await fetch(`${ctx.baseUrl}/api/investment/budget/${line.id}`, {
+      method: 'DELETE', headers: { Cookie: h },
+    });
+    assert.equal(res.status, 409);
+    assert.match((await res.json()).error, /reassign or remove/);
+    assert.equal((await get()).budget.some((b) => b.id === line.id), true, 'still there');
+  });
+
+  test('adding and removing both reach the trail as sensitive', async () => {
+    const log = await (await fetch(`${ctx.baseUrl}/api/audit?limit=100`, { headers: { Cookie: owner } })).json();
+    const added = log.find((e) => e.action === 'investment-budget-added');
+    const removed = log.find((e) => e.action === 'investment-budget-removed');
+    assert.ok(added && removed, 'both actions recorded');
+    assert.equal(added.area, 'investment');
+    assert.equal(added.sensitive, true);
+    assert.match(removed.detail, /Typo/);
+  });
+
+  test('a non-admin cannot add a budget line', async () => {
+    const res = await fetch(`${ctx.baseUrl}/api/investment/budget`, {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ item: 'Sneak', amount: 1 }),
+    });
+    assert.equal(res.status, 401);
+  });
+});

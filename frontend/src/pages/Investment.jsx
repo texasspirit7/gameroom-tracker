@@ -10,12 +10,15 @@ const dayLabel = (iso) => {
 };
 
 const emptyForm = () => ({ released_on: todayISO(), amount: '', budget_id: '', note: '' });
+const emptyLine = () => ({ item: '', qty: '', price_each: '', amount: '' });
 
 export default function Investment() {
   const [data, setData] = useState(null);
   const [error, setError] = useState(null);
   const [form, setForm] = useState(emptyForm());
   const [busy, setBusy] = useState(false);
+  const [line, setLine] = useState(emptyLine());
+  const [addingLine, setAddingLine] = useState(false);
 
   const load = () => api.investment().then(setData).catch((e) => setError(e.message));
   useEffect(() => { load(); }, []);
@@ -45,6 +48,37 @@ export default function Investment() {
     setError(null);
     try {
       await api.deleteRelease(d.id);
+      await load();
+    } catch (err) {
+      setError(err.message);
+    }
+  };
+
+  const addLine = async (e) => {
+    e.preventDefault();
+    setAddingLine(true);
+    setError(null);
+    try {
+      await api.addBudgetLine({
+        item: line.item,
+        qty: line.qty || null,
+        price_each: line.price_each || null,
+        amount: line.amount || null,
+      });
+      setLine(emptyLine());
+      await load();
+    } catch (err) {
+      setError(err.message);
+    } finally {
+      setAddingLine(false);
+    }
+  };
+
+  const removeLine = async (b) => {
+    if (!window.confirm(`Remove "${b.item}" from the budget?`)) return;
+    setError(null);
+    try {
+      await api.deleteBudgetLine(b.id);
       await load();
     } catch (err) {
       setError(err.message);
@@ -165,7 +199,7 @@ export default function Investment() {
           <thead>
             <tr>
               <th>#</th><th>Item</th><th>Qty</th><th>Each</th>
-              <th>Quoted</th><th>Released</th><th title="Released minus quoted">Variance</th>
+              <th>Quoted</th><th>Released</th><th title="Released minus quoted">Variance</th><th />
             </tr>
           </thead>
           <tbody>
@@ -181,10 +215,39 @@ export default function Investment() {
                 <td className={b.variance > 0 ? 'neg' : undefined}>
                   {b.released ? signedMoney(b.variance) : '—'}
                 </td>
+                <td>
+                  {/* Only a line with nothing booked against it can go — the server refuses
+                      the rest, and offering a button that fails would be worse. */}
+                  {b.released
+                    ? <span className="muted" title="Money has been released against this line">locked</span>
+                    : <button className="danger row-action" onClick={() => removeLine(b)}>Remove</button>}
+                </td>
               </tr>
             ))}
           </tbody>
         </table>
+
+        <form className="receipt-form" style={{ marginTop: 18 }} onSubmit={addLine}>
+          <label className="grow">Add an item
+            <input type="text" required placeholder="e.g. extra bill validator" value={line.item}
+              onChange={(e) => setLine((l) => ({ ...l, item: e.target.value }))} />
+          </label>
+          <label>Qty
+            <input type="number" step="1" min="0" placeholder="—" value={line.qty}
+              onChange={(e) => setLine((l) => ({ ...l, qty: e.target.value }))} />
+          </label>
+          <label>Each
+            <input type="number" step="0.01" min="0" placeholder="—" value={line.price_each}
+              onChange={(e) => setLine((l) => ({ ...l, price_each: e.target.value }))} />
+          </label>
+          <label title="Worked out from quantity × price when both are given">Amount
+            <input type="number" step="0.01" min="0" placeholder="0.00"
+              value={line.qty && line.price_each ? Number(line.qty) * Number(line.price_each) : line.amount}
+              disabled={Boolean(line.qty && line.price_each)}
+              onChange={(e) => setLine((l) => ({ ...l, amount: e.target.value }))} />
+          </label>
+          <button className="btn" disabled={addingLine}>{addingLine ? 'Adding…' : 'Add'}</button>
+        </form>
       </div>
     </>
   );
