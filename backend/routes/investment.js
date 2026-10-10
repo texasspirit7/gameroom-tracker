@@ -44,9 +44,39 @@ export function buildInvestment(db, loc, recovered = 0) {
     `).all().map((r) => [r.budget_id, r.spent]),
   );
 
-  const budget = db.prepare('SELECT * FROM investment_budget ORDER BY line_no').all().map((b) => {
-    const released = round2(spentByLine.get(b.id) || 0);
-    return { ...b, released, variance: round2(released - b.amount) };
+  const lines = db.prepare('SELECT * FROM investment_budget ORDER BY line_no').all().map((b) => ({
+    ...b,
+    assigned: round2(spentByLine.get(b.id) || 0),
+  }));
+
+  const released = releasedTotal(db);
+  const assignedTotal = round2(lines.reduce((s, b) => s + b.assigned, 0));
+  // Money released without naming a line: its purpose wasn't recorded, so rather than leave it
+  // floating it is spread across what the budget still has unfunded.
+  const unassigned = round2(released - assignedTotal);
+
+  // Spread in proportion to each line's remaining need, not to its full quote — a line already
+  // paid for directly shouldn't be covered twice. Anything beyond the total remaining need is
+  // surplus and stays out of the budget rows, because there is nothing left for it to fund.
+  const needs = lines.map((b) => Math.max(0, round2(b.amount - b.assigned)));
+  const totalNeed = round2(needs.reduce((a, n) => a + n, 0));
+  const spreadable = Math.min(Math.max(unassigned, 0), totalNeed);
+
+  let distributed = 0;
+  const budget = lines.map((b, i) => {
+    // The last funded line takes the rounding remainder so the parts always sum to the whole.
+    const isLastWithNeed = needs.slice(i + 1).every((n) => n === 0);
+    const share = totalNeed > 0 && needs[i] > 0
+      ? (isLastWithNeed ? round2(spreadable - distributed) : round2((needs[i] / totalNeed) * spreadable))
+      : 0;
+    distributed = round2(distributed + share);
+    const releasedAgainst = round2(b.assigned + share);
+    return {
+      ...b,
+      spread: share,
+      released: releasedAgainst,
+      variance: round2(releasedAgainst - b.amount),
+    };
   });
 
   const disbursements = db.prepare(`
@@ -56,11 +86,7 @@ export function buildInvestment(db, loc, recovered = 0) {
     ORDER BY d.released_on DESC, d.id DESC
   `).all();
 
-  const released = releasedTotal(db);
   const quoted = round2(budget.reduce((s, b) => s + b.amount, 0));
-  // Anything released without naming a line still counts toward the total — it just can't be
-  // shown against a budget row.
-  const unassigned = round2(released - budget.reduce((s, b) => s + b.released, 0));
 
   return {
     budget,
@@ -68,7 +94,11 @@ export function buildInvestment(db, loc, recovered = 0) {
     summary: {
       quoted,
       released,
+      assigned: assignedTotal,
       unassigned,
+      // Spread across the budget's remaining need, and whatever was left over after that.
+      spread: round2(distributed),
+      surplus: round2(Math.max(0, unassigned - distributed)),
       remaining_to_release: round2(Math.max(0, quoted - released)),
       recovered: round2(recovered),
       // Recovery is measured against what was actually released, not the quote: you get back

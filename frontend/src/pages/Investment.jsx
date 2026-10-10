@@ -192,9 +192,18 @@ export default function Investment() {
           Budget
           <span className="panel-count">
             quoted ${fmt(summary.quoted)}
-            {summary.unassigned > 0 && ` · $${fmt(summary.unassigned)} released without a line`}
+            {summary.spread > 0 && ` · $${fmt(summary.spread)} spread across unfunded items`}
+            {summary.surplus > 0 && ` · $${fmt(summary.surplus)} surplus`}
           </span>
         </h2>
+        {summary.unassigned > 0 && (
+          <p className="muted" style={{ fontSize: 12, marginTop: 0 }}>
+            ${fmt(summary.unassigned)} was released without naming an item. It's shown under{' '}
+            <strong>Spread</strong>, shared across what each line still has unfunded — a line
+            already paid for directly takes none of it.
+            {summary.surplus > 0 && ` $${fmt(summary.surplus)} is left over once every line is covered.`}
+          </p>
+        )}
         <table className="split-table">
           <thead>
             <tr>
@@ -210,6 +219,8 @@ export default function Investment() {
                 <td className="muted">{b.qty ?? '—'}</td>
                 <td className="muted">{b.price_each ? `$${fmt(b.price_each)}` : '—'}</td>
                 <td>${fmt(b.amount)}</td>
+                <td>{b.assigned ? `$${fmt(b.assigned)}` : '—'}</td>
+                <td className="muted">{b.spread ? `$${fmt(b.spread)}` : '—'}</td>
                 <td>{b.released ? `$${fmt(b.released)}` : '—'}</td>
                 {/* Over the quote is the thing worth noticing, so only that is coloured. */}
                 <td className={b.variance > 0 ? 'neg' : undefined}>
@@ -218,7 +229,7 @@ export default function Investment() {
                 <td>
                   {/* Only a line with nothing booked against it can go — the server refuses
                       the rest, and offering a button that fails would be worse. */}
-                  {b.released
+                  {b.assigned
                     ? <span className="muted" title="Money has been released against this line">locked</span>
                     : <button className="danger row-action" onClick={() => removeLine(b)}>Remove</button>}
                 </td>
