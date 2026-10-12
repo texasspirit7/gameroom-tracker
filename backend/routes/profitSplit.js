@@ -221,10 +221,16 @@ export function buildAccountSummary(rows, loc, db) {
   const target = loc.investment && db ? releasedTotal(db) || null : loc.runningTarget ?? null;
   const owedTotal = round2(rows.owedTotal || 0);
   const receivedTotal = round2(rows.receivedTotal || 0);
+  // Settled another way: these reduce what is still owed without any cash changing hands.
+  const expensesTotal = db
+    ? round2(db.prepare('SELECT COALESCE(SUM(amount), 0) AS t FROM split_expenses').get().t)
+    : 0;
   return {
     owed_total: owedTotal,
     received_total: receivedTotal,
-    balance: round2(owedTotal - receivedTotal),
+    expenses_total: expensesTotal,
+    settled_total: round2(receivedTotal + expensesTotal),
+    balance: round2(owedTotal - receivedTotal - expensesTotal),
     paid_through: rows.paidThrough,
     // null target means the page simply shows the running total with nothing to measure
     // it against — H has no goal set, La is working toward $80k.
@@ -324,6 +330,83 @@ function readNoteBody(body, existing = null) {
 
   return { noteDate, body: text.trim().slice(0, NOTE_MAX) };
 }
+
+const EXPENSE_NOTE_MAX = 500;
+
+function readExpense(body, existing = null) {
+  const expenseDate = body?.expense_date === undefined ? existing?.expense_date : String(body.expense_date);
+  if (!expenseDate || !DATE_RE.test(expenseDate)) return { error: 'Expense date must be YYYY-MM-DD' };
+
+  const raw = body?.amount === undefined ? existing?.amount : body.amount;
+  const amount = Number(raw);
+  if (!Number.isFinite(amount) || amount <= 0) return { error: 'Amount must be a positive number' };
+
+  const note = body?.note === undefined ? existing?.note ?? null : String(body.note).slice(0, EXPENSE_NOTE_MAX) || null;
+  return { expenseDate, amount: round2(amount), note };
+}
+
+const asMoney = (n) => `$${Number(n).toLocaleString()}`;
+
+/** GET /api/profit-split/expenses — costs charged against the balance, newest first. */
+profitSplitRouter.get('/expenses', adminGate, (req, res) => {
+  res.json(req.db.prepare('SELECT * FROM split_expenses ORDER BY expense_date DESC, id DESC').all());
+});
+
+/** POST /api/profit-split/expenses  { expense_date, amount, note? } */
+profitSplitRouter.post('/expenses', adminGate, (req, res) => {
+  const parsed = readExpense(req.body);
+  if (parsed.error) return res.status(400).json({ error: parsed.error });
+
+  const info = req.db.prepare(
+    'INSERT INTO split_expenses (expense_date, amount, note, created_by) VALUES (?, ?, ?, ?)'
+  ).run(parsed.expenseDate, parsed.amount, parsed.note, req.user?.email ?? null);
+
+  logAudit(req, {
+    action: 'split-expense-added',
+    detail: `${asMoney(parsed.amount)} on ${parsed.expenseDate}${parsed.note ? ` — ${parsed.note}` : ''}`,
+  });
+  res.status(201).json(req.db.prepare('SELECT * FROM split_expenses WHERE id = ?').get(info.lastInsertRowid));
+});
+
+/** PATCH /api/profit-split/expenses/:id */
+profitSplitRouter.patch('/expenses/:id', adminGate, (req, res) => {
+  const id = Number(req.params.id);
+  const existing = req.db.prepare('SELECT * FROM split_expenses WHERE id = ?').get(id);
+  if (!existing) return res.status(404).json({ error: 'Expense not found' });
+
+  const parsed = readExpense(req.body, existing);
+  if (parsed.error) return res.status(400).json({ error: parsed.error });
+
+  // Both sides recorded: a changed amount means nothing without the one it replaced.
+  const changes = [];
+  if (parsed.amount !== existing.amount) changes.push(`${asMoney(existing.amount)} → ${asMoney(parsed.amount)}`);
+  if (parsed.expenseDate !== existing.expense_date) changes.push(`date ${existing.expense_date} → ${parsed.expenseDate}`);
+  if ((parsed.note ?? null) !== (existing.note ?? null)) changes.push('note changed');
+  if (!changes.length) return res.json(existing);
+
+  req.db.prepare(`
+    UPDATE split_expenses SET expense_date = ?, amount = ?, note = ?, updated_by = ?, updated_at = datetime('now')
+    WHERE id = ?
+  `).run(parsed.expenseDate, parsed.amount, parsed.note, req.user?.email ?? null, id);
+
+  logAudit(req, { action: 'split-expense-edited', detail: changes.join('; ') });
+  res.json(req.db.prepare('SELECT * FROM split_expenses WHERE id = ?').get(id));
+});
+
+/** DELETE /api/profit-split/expenses/:id */
+profitSplitRouter.delete('/expenses/:id', adminGate, (req, res) => {
+  const id = Number(req.params.id);
+  // Read before the delete — afterwards there is nothing left to describe.
+  const existing = req.db.prepare('SELECT * FROM split_expenses WHERE id = ?').get(id);
+  if (!existing) return res.status(404).json({ error: 'Expense not found' });
+
+  req.db.prepare('DELETE FROM split_expenses WHERE id = ?').run(id);
+  logAudit(req, {
+    action: 'split-expense-deleted',
+    detail: `${asMoney(existing.amount)} on ${existing.expense_date}`,
+  });
+  res.json({ ok: true, id });
+});
 
 /** GET /api/profit-split/notes — dated notes, newest first. */
 profitSplitRouter.get('/notes', adminGate, (req, res) => {

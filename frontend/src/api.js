@@ -84,6 +84,10 @@ export const api = {
   addBudgetLine: (body) => request('/api/investment/budget', { method: 'POST', body: JSON.stringify(body) }),
   deleteBudgetLine: (id) => request(`/api/investment/budget/${id}`, { method: 'DELETE' }),
 
+  splitExpenses: () => request('/api/profit-split/expenses'),
+  addSplitExpense: (body) => request('/api/profit-split/expenses', { method: 'POST', body: JSON.stringify(body) }),
+  deleteSplitExpense: (id) => request(`/api/profit-split/expenses/${id}`, { method: 'DELETE' }),
+
   profitNotes: () => request('/api/profit-split/notes'),
   addProfitNote: (body) => request('/api/profit-split/notes', { method: 'POST', body: JSON.stringify(body) }),
   updateProfitNote: (id, body) =>

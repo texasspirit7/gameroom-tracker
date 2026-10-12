@@ -1,4 +1,5 @@
 import { useEffect, useLayoutEffect, useRef, useState } from 'react';
+import { Link } from 'react-router-dom';
 import { api, fmt, signedMoney } from '../api.js';
 import { todayISO } from '../dateRange.js';
 
@@ -41,6 +42,9 @@ const emptyForm = () => ({ received_on: todayISO(), amount: '', expense_credit: 
 export default function ProfitSplit() {
   const [data, setData] = useState(null);
   const [ledger, setLedger] = useState([]);
+  const [costs, setCosts] = useState([]);
+  const [costForm, setCostForm] = useState(() => ({ expense_date: todayISO(), amount: '', note: '' }));
+  const [costBusy, setCostBusy] = useState(false);
   const [error, setError] = useState(null);
   const [form, setForm] = useState(emptyForm());
   const [busy, setBusy] = useState(false);
@@ -53,12 +57,13 @@ export default function ProfitSplit() {
   const [ledgerMaxH, setLedgerMaxH] = useState(null);
 
   const load = async () => {
-    const [split, receipts, noteRows] = await Promise.all([
-      api.profitSplit(), api.profitReceipts(), api.profitNotes(),
+    const [split, receipts, noteRows, expenseRows] = await Promise.all([
+      api.profitSplit(), api.profitReceipts(), api.profitNotes(), api.splitExpenses(),
     ]);
     setData(split);
     setLedger(receipts);
     setNotes(noteRows);
+    setCosts(expenseRows);
   };
   useEffect(() => { load().catch((e) => setError(e.message)); }, []);
 
@@ -171,6 +176,36 @@ export default function ProfitSplit() {
     }
   };
 
+  const submitCost = async (e) => {
+    e.preventDefault();
+    setCostBusy(true);
+    setError(null);
+    try {
+      await api.addSplitExpense({
+        expense_date: costForm.expense_date,
+        amount: Number(costForm.amount),
+        note: costForm.note,
+      });
+      setCostForm({ expense_date: todayISO(), amount: '', note: '' });
+      await load();
+    } catch (err) {
+      setError(err.message);
+    } finally {
+      setCostBusy(false);
+    }
+  };
+
+  const removeCost = async (c) => {
+    if (!window.confirm(`Delete the $${fmt(c.amount)} expense from ${c.expense_date}? The balance will go back up.`)) return;
+    setError(null);
+    try {
+      await api.deleteSplitExpense(c.id);
+      await load();
+    } catch (err) {
+      setError(err.message);
+    }
+  };
+
   const saveNotes = async (row) => {
     const draft = notesDraft[row.period];
     if (draft === undefined || draft === row.notes) return;
@@ -228,9 +263,11 @@ export default function ProfitSplit() {
             ${fmt(Math.abs(account.balance))}{account.balance < 0 ? ' over' : ''}
           </span>
           <span className="muted">
-            {account.paid_through === 'closed' ? 'closed period settled'
-              : account.paid_through ? `paid up through ${dayLabel(account.paid_through)}`
-              : 'nothing covered yet'}
+            {account.expenses_total > 0
+              ? `after $${fmt(account.received_total)} received + $${fmt(account.expenses_total)} expenses`
+              : account.paid_through === 'closed' ? 'closed period settled'
+                : account.paid_through ? `paid up through ${dayLabel(account.paid_through)}`
+                : 'nothing covered yet'}
           </span>
         </div>
       </div>
@@ -311,6 +348,56 @@ export default function ProfitSplit() {
           <p className="muted ledger-hint">
             Showing {LEDGER_VISIBLE} of {ledger.length} — scroll for older payments.
           </p>
+        )}
+      </div>
+
+      <div className="panel">
+        <h2>
+          Expenses
+          <span className="panel-count">
+            {costs.length} · ${fmt(account.expenses_total)} off the balance
+          </span>
+        </h2>
+        <p className="muted" style={{ fontSize: 12, marginTop: 0 }}>
+          Costs settled against what you&rsquo;re owed, rather than paid in cash. These come off
+          the balance <em>after</em> the split — overhead that should reduce the weekly profit
+          itself belongs on the <Link to="/expenses">Expenses</Link> page instead, not both.
+        </p>
+
+        <form className="receipt-form" onSubmit={submitCost}>
+          <label>Date
+            <input type="date" required value={costForm.expense_date}
+              onChange={(e) => setCostForm((f) => ({ ...f, expense_date: e.target.value }))} />
+          </label>
+          <label>Amount
+            <input type="number" step="0.01" min="0.01" required placeholder="0.00" value={costForm.amount}
+              onChange={(e) => setCostForm((f) => ({ ...f, amount: e.target.value }))} />
+          </label>
+          <label className="grow">Note
+            <input type="text" placeholder="e.g. parts bought on my card" value={costForm.note}
+              onChange={(e) => setCostForm((f) => ({ ...f, note: e.target.value }))} />
+          </label>
+          <button className="btn" disabled={costBusy}>{costBusy ? 'Saving…' : 'Record'}</button>
+        </form>
+
+        {costs.length === 0 ? (
+          <p className="muted" style={{ marginTop: 16 }}>No expenses recorded yet.</p>
+        ) : (
+          <table className="receipt-table wide">
+            <thead>
+              <tr><th>Date</th><th>Amount</th><th>Note</th><th /></tr>
+            </thead>
+            <tbody>
+              {costs.map((c) => (
+                <tr key={c.id}>
+                  <td>{dayLabel(c.expense_date)}</td>
+                  <td><b>${fmt(c.amount)}</b></td>
+                  <td className="muted">{c.note || '—'}</td>
+                  <td><button className="danger row-action" onClick={() => removeCost(c)}>Delete</button></td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
         )}
       </div>
 

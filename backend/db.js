@@ -175,6 +175,22 @@ function applySchema(db) {
     updated_at TEXT
   );
 
+  -- Costs that come off what the 40% side is owed, rather than off the business's net profit.
+  --
+  -- Deliberately separate from the expenses and other_expenses tables, which reduce net profit
+  -- before the split is worked out. These sit after it: money already accounted for against
+  -- the balance. The same cost must go in one place or the other, never both.
+  CREATE TABLE IF NOT EXISTS split_expenses (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    expense_date TEXT NOT NULL,                     -- YYYY-MM-DD
+    amount REAL NOT NULL DEFAULT 0,
+    note TEXT,
+    created_by TEXT,
+    created_at TEXT NOT NULL DEFAULT (datetime('now')),
+    updated_by TEXT,
+    updated_at TEXT
+  );
+
   -- Who did what to a sheet, and when — sheet_id/sheet_date are kept even after a
     -- delete (denormalized, not a foreign key) so the trail survives the sheet itself.
     CREATE TABLE IF NOT EXISTS audit_log (
@@ -195,6 +211,7 @@ function applySchema(db) {
     CREATE INDEX IF NOT EXISTS idx_audit_log_created ON audit_log(created_at);
     CREATE INDEX IF NOT EXISTS idx_profit_notes_date ON profit_notes(note_date);
   CREATE INDEX IF NOT EXISTS idx_disbursements_date ON investment_disbursements(released_on);
+  CREATE INDEX IF NOT EXISTS idx_split_expenses_date ON split_expenses(expense_date);
   `);
 
   // One-time data fix: the sheet's "FD" row (Family Dollar store) was previously
