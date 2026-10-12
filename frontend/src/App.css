@@ -840,3 +840,27 @@ input[type="date"] { color-scheme: dark; }
   color: var(--muted); font-size: 12px; cursor: pointer;
 }
 .gate-back:hover { color: var(--ink); filter: none; }
+
+
+/* Location switcher in the sidebar brand — styled to read as the title it replaces, not as a
+   form control, until you go near it. */
+.brand-switch {
+  appearance: none;
+  background: transparent;
+  border: 1px solid transparent;
+  padding: 1px 20px 1px 4px;
+  margin-left: -4px;
+  font: inherit;
+  font-size: 15px;
+  font-weight: 700;
+  color: var(--ink);
+  cursor: pointer;
+  border-radius: 4px;
+  background-image: linear-gradient(45deg, transparent 50%, var(--muted) 50%),
+                    linear-gradient(135deg, var(--muted) 50%, transparent 50%);
+  background-position: calc(100% - 9px) 55%, calc(100% - 5px) 55%;
+  background-size: 4px 4px, 4px 4px;
+  background-repeat: no-repeat;
+}
+.brand-switch:hover { border-color: var(--line); background-color: var(--sunk); }
+.brand-switch option { background: var(--panel); color: var(--ink); font-weight: 500; }

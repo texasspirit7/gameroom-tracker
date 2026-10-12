@@ -2,7 +2,7 @@ import jwt from 'jsonwebtoken';
 import { OAuth2Client } from 'google-auth-library';
 import { config } from './config.js';
 import { getDb } from './db.js';
-import { isLocation, LOCATION_KEYS, locationOf } from './locations.js';
+import { isLocation, LOCATION_KEYS, locationOf, LOCATIONS } from './locations.js';
 
 const COOKIE_NAME = 'grt_session';
 /**
@@ -161,6 +161,10 @@ export function publicUser(user, location) {
     location: location ?? null,
     // Only a location with setup costs to recover shows the Investment page.
     hasInvestment: Boolean(locationOf(location)?.investment),
+    // Everywhere this account may go, so the shell can offer a switch without a round trip.
+    // Computed from the other locations' databases, which is why it lives here and not on the
+    // user row.
+    locations: locationsFor(email).map((k) => ({ key: k, label: LOCATIONS[k].label, name: LOCATIONS[k].name })),
   };
 }
 

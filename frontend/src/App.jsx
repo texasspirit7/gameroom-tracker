@@ -134,7 +134,7 @@ function AdminOnly({ children }) {
 function AppShell() {
   const [navOpen, setNavOpen] = useState(false);
   const { pathname } = useLocation();
-  const { isAdmin, isOwner, authEnabled, locationLabel, hasInvestment } = useAuth();
+  const { isAdmin, isOwner, authEnabled, locationLabel, hasInvestment, myLocations, switchLocation, user } = useAuth();
   const showAdminOnly = !authEnabled || isAdmin;
   const showOwnerOnly = !authEnabled || isOwner;
 
@@ -160,7 +160,20 @@ function AppShell() {
           <div>
             {/* Names the location you are actually in. With two of them looking identical
                 apart from the figures, a fixed label would be worse than none. */}
-            <div className="brand-name">{locationLabel || 'Tracker'}</div>
+            {/* A switcher only where there is something to switch to — a dropdown of one
+                would be a worse way of saying the same thing. */}
+            {myLocations.length > 1 ? (
+              <select
+                className="brand-switch"
+                value={user?.location || ''}
+                onChange={(e) => switchLocation(e.target.value)}
+                aria-label="Switch location"
+              >
+                {myLocations.map((l) => <option key={l.key} value={l.key}>{l.name || l.label}</option>)}
+              </select>
+            ) : (
+              <div className="brand-name">{locationLabel || 'Tracker'}</div>
+            )}
             <div className="brand-sub">Daily sheets</div>
           </div>
           <button className="sidebar-close" aria-label="Close menu" onClick={() => setNavOpen(false)}>✕</button>

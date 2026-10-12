@@ -57,6 +57,25 @@ export function AuthProvider({ children }) {
     }
   };
 
+  /**
+   * Move an existing session to another location. The server re-checks access, so a refusal
+   * here means the account genuinely can't go there.
+   */
+  const switchLocation = async (location) => {
+    setError(null);
+    try {
+      await api.switchLocation(location);
+      // A full reload rather than just setting the user: every page holds data it fetched for
+      // the old location, and updating the label alone would leave one location's figures on
+      // screen under the other's name — the exact confusion separate databases exist to avoid.
+      window.location.reload();
+      return true;
+    } catch (e) {
+      setError(e.message);
+      return false;
+    }
+  };
+
   /** Back to the start of sign-in — used by the "not you?" link. */
   const resetIdentity = () => {
     setAllowed(null);
@@ -131,7 +150,9 @@ export function AuthProvider({ children }) {
     <AuthContext.Provider value={{
       loading, authEnabled, authProvider, googleClientId, user, error,
       login, loginWithGoogle, logout, isAdmin, isOwner, refresh,
-      allowed, pendingApproval, enter, resetIdentity,
+      allowed, pendingApproval, enter, resetIdentity, switchLocation,
+      // Everywhere this account may go, for the sidebar switcher.
+      myLocations: user?.locations || [],
       // Which location this session is in — the shell names it so the two can't be confused.
       locationLabel: locationNames[user?.location] || null,
       hasInvestment: Boolean(user?.hasInvestment),

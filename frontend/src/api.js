@@ -54,6 +54,8 @@ export const api = {
     request('/api/auth/local', { method: 'POST', body: JSON.stringify({ name, email }) }),
   identifyGoogle: (credential) =>
     request('/api/auth/google', { method: 'POST', body: JSON.stringify({ credential }) }),
+  switchLocation: (location) =>
+    request('/api/auth/switch', { method: 'POST', body: JSON.stringify({ location }) }),
   enterLocation: (location) =>
     request('/api/auth/enter', { method: 'POST', body: JSON.stringify({ location }) }),
   logout: () => request('/api/auth/logout', { method: 'POST' }),

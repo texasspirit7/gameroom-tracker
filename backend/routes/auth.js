@@ -88,6 +88,34 @@ authRouter.post('/enter', (req, res) => {
   res.json({ user: publicUser(user, location) });
 });
 
+/**
+ * POST /api/auth/switch  { location } — move an existing session to another location.
+ *
+ * Re-checked against what this account may actually enter rather than trusted from the
+ * request: the switcher in the sidebar only lists permitted locations, but hiding an option
+ * has never been what stops anyone.
+ */
+authRouter.post('/switch', requireAuth, (req, res) => {
+  const { location } = req.body || {};
+  if (!isLocation(location)) return res.status(400).json({ error: 'Unknown location' });
+  if (location === req.location) return res.json({ user: publicUser(req.user, location) });
+
+  if (!locationsFor(req.user.email).includes(location)) {
+    return res.status(403).json({ error: 'No access to that location' });
+  }
+
+  // A separate account in each database, so the one being switched to is looked up there.
+  const db = getDb(location);
+  const user = findOrCreateUser(db, { email: req.user.email, name: req.user.name, picture: req.user.picture });
+  if (user.status === 'blocked') return res.status(403).json({ error: 'Account blocked' });
+
+  issueSession(res, user, location);
+  req.db = db;
+  req.user = user;
+  logAudit(req, { action: 'signed-in', detail: `Switched to ${LOCATIONS[location].label}` });
+  res.json({ user: publicUser(user, location) });
+});
+
 authRouter.get('/me', requireAuth, (req, res) => {
   res.json({ user: publicUser(req.user, req.location) });
 });
