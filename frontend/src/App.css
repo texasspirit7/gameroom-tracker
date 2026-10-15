@@ -73,6 +73,13 @@ a:hover { color: var(--ink); }
   position: sticky;
   top: var(--lights-height);
   height: calc(100vh - var(--lights-height));
+  /* dvh tracks the viewport as mobile browser chrome shows and hides; vh reports the chrome-
+     hidden height, which leaves the foot of the nav under the address bar. */
+  height: calc(100dvh - var(--lights-height));
+  /* The nav has outgrown short windows, and without this the end of it — user, sign out —
+     is simply unreachable rather than scrolled to. */
+  overflow-y: auto;
+  overscroll-behavior: contain;
 }
 .brand { display: flex; gap: 10px; align-items: center; padding: 20px 18px; border-bottom: 1px solid var(--line-soft); }
 .brand-icon { font-size: 26px; }
@@ -647,6 +654,7 @@ input[type="date"] { color-scheme: dark; }
     left: 0;
     top: var(--lights-height);
     height: calc(100vh - var(--lights-height));
+    height: calc(100dvh - var(--lights-height));
     width: 260px;
     max-width: 82vw;
     z-index: 60;
@@ -664,6 +672,7 @@ input[type="date"] { color-scheme: dark; }
   .sidebar-backdrop {
     display: block; position: fixed; inset: 0;
     top: var(--lights-height);
+    height: calc(100dvh - var(--lights-height));
     background: rgba(0, 0, 0, 0.65);
     z-index: 55;
   }
