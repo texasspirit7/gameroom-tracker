@@ -129,6 +129,11 @@ export default function AdminUsers() {
                 {canManage && (
                   <td>
                     {u.id !== me?.id && (
+                      u.isOwner ? (
+                        // Protected everywhere it matters, so the row says so rather than
+                        // offering buttons that can only fail.
+                        <span className="badge verified">owner</span>
+                      ) : (
                       <>
                         {u.role === 'admin' ? (
                           <button className="secondary" onClick={() => act(() => api.setUserRole(u.id, 'user'))}>Make user</button>
@@ -143,6 +148,7 @@ export default function AdminUsers() {
                         {/* Blocking bars the door and keeps the record; this removes it. */}
                         <button className="danger" onClick={() => removeUser(u)}>Delete</button>
                       </>
+                      )
                     )}
                     {u.id === me?.id && <span className="muted">(you)</span>}
                   </td>

@@ -219,6 +219,15 @@ export function requireAdmin(req, res, next) {
  * The Activity trail is the record of what everyone did, including admins acting on each
  * other's accounts — so it is restricted to the owner rather than to admins generally.
  */
+/**
+ * The owner's account cannot be deleted, blocked or demoted by anyone, including another
+ * admin and including themselves.
+ *
+ * Protecting only deletion would be false assurance: blocking locks the account out just as
+ * completely, and demoting it strips the admin rights it needs to undo either.
+ */
+export const isOwnerEmail = (email) => (email || '').toLowerCase() === config.ownerEmail;
+
 export function ownerGate(req, res, next) {
   if (!config.authEnabled) return next();
   const email = (req.user?.email || '').toLowerCase();

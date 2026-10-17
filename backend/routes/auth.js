@@ -3,7 +3,7 @@ import { config } from '../config.js';
 import {
   verifyGoogleCredential, verifyLocalCredential, findOrCreateUser, issueSession, clearSession,
   publicUser, requireAuth, requireApproved, requireAdmin,
-  locationsFor, hasPendingAnywhere, issueIdentity, readIdentity, clearIdentity,
+  locationsFor, hasPendingAnywhere, issueIdentity, readIdentity, clearIdentity, isOwnerEmail,
 } from '../auth.js';
 import { getDb } from '../db.js';
 import { isLocation, LOCATIONS } from '../locations.js';
@@ -130,7 +130,11 @@ authRouter.post('/logout', (req, res) => {
 adminRouter.use(requireAuth, requireApproved);
 
 adminRouter.get('/users', requireAdmin, (req, res) => {
-  res.json(req.db.prepare('SELECT id, email, name, role, status, created_at, approved_at, approved_by FROM users ORDER BY created_at DESC').all());
+  const rows = req.db.prepare(
+    'SELECT id, email, name, role, status, created_at, approved_at, approved_by FROM users ORDER BY created_at DESC'
+  ).all();
+  // Flagged rather than compared in the browser: the owner's address isn't the client's to know.
+  res.json(rows.map((u) => ({ ...u, isOwner: isOwnerEmail(u.email) })));
 });
 
 /**
@@ -170,6 +174,10 @@ adminRouter.post('/users/:id/block', requireAdmin, (req, res) => {
   const id = Number(req.params.id);
   if (id === req.user.id) return res.status(400).json({ error: "You can't block your own account" });
   const target = req.db.prepare('SELECT email FROM users WHERE id = ?').get(id);
+  if (isOwnerEmail(target?.email)) {
+    return res.status(403).json({ error: 'The owner account is protected and cannot be blocked.' });
+  }
+
   const result = req.db.prepare("UPDATE users SET status = 'blocked' WHERE id = ?").run(id);
   if (!result.changes) return res.status(404).json({ error: 'User not found' });
   logAudit(req, { action: 'user-blocked', detail: `Blocked ${target?.email ?? `user #${id}`}` });
@@ -192,6 +200,9 @@ adminRouter.delete('/users/:id', requireAdmin, (req, res) => {
 
   const target = req.db.prepare('SELECT * FROM users WHERE id = ?').get(id);
   if (!target) return res.status(404).json({ error: 'User not found' });
+  if (isOwnerEmail(target?.email)) {
+    return res.status(403).json({ error: 'The owner account is protected and cannot be removed.' });
+  }
 
   req.db.prepare('DELETE FROM users WHERE id = ?').run(id);
   logAudit(req, { action: 'user-deleted', detail: `Removed ${target.email}` });
@@ -204,6 +215,10 @@ adminRouter.post('/users/:id/role', requireAdmin, (req, res) => {
   if (!['admin', 'user'].includes(role)) return res.status(400).json({ error: "role must be 'admin' or 'user'" });
   if (id === req.user.id && role === 'user') return res.status(400).json({ error: "You can't demote your own account" });
   const target = req.db.prepare('SELECT email, role FROM users WHERE id = ?').get(id);
+  if (role === 'user' && isOwnerEmail(target?.email)) {
+    return res.status(403).json({ error: 'The owner account is protected and cannot be demoted.' });
+  }
+
   const result = req.db.prepare('UPDATE users SET role = ? WHERE id = ?').run(role, id);
   if (!result.changes) return res.status(404).json({ error: 'User not found' });
   logAudit(req, {
