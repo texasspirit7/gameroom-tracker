@@ -65,6 +65,7 @@ export const api = {
     request('/api/admin/users', { method: 'POST', body: JSON.stringify({ email, name }) }),
   approveUser: (id) => request(`/api/admin/users/${id}/approve`, { method: 'POST' }),
   blockUser: (id) => request(`/api/admin/users/${id}/block`, { method: 'POST' }),
+  deleteUser: (id) => request(`/api/admin/users/${id}`, { method: 'DELETE' }),
   setUserRole: (id, role) => request(`/api/admin/users/${id}/role`, { method: 'POST', body: JSON.stringify({ role }) }),
 
   profitSplit: () => request('/api/profit-split'),

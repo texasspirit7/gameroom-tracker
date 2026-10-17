@@ -23,6 +23,12 @@ export default function AdminUsers() {
     }
   };
 
+  const removeUser = async (u) => {
+    // Named rather than "this user": the rows look alike and the action can't be undone.
+    if (!window.confirm(`Remove ${u.email} from ${locationLabel || 'this location'}? They lose access here and the account is deleted.`)) return;
+    await act(() => api.deleteUser(u.id));
+  };
+
   const addUser = async (e) => {
     e.preventDefault();
     setInviting(true);
@@ -97,7 +103,8 @@ export default function AdminUsers() {
                   {canManage && (
                     <td>
                       <button onClick={() => act(() => api.approveUser(u.id))}>Approve</button>{' '}
-                      <button className="danger" onClick={() => act(() => api.blockUser(u.id))}>Block</button>
+                      <button className="danger" onClick={() => act(() => api.blockUser(u.id))}>Block</button>{' '}
+                      <button className="danger" onClick={() => removeUser(u)}>Delete</button>
                     </td>
                   )}
                 </tr>
@@ -132,7 +139,9 @@ export default function AdminUsers() {
                           <button onClick={() => act(() => api.approveUser(u.id))}>Unblock</button>
                         ) : (
                           <button className="danger" onClick={() => act(() => api.blockUser(u.id))}>Block</button>
-                        )}
+                        )}{' '}
+                        {/* Blocking bars the door and keeps the record; this removes it. */}
+                        <button className="danger" onClick={() => removeUser(u)}>Delete</button>
                       </>
                     )}
                     {u.id === me?.id && <span className="muted">(you)</span>}

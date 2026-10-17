@@ -16,6 +16,7 @@ const AREA_BY_ACTION = {
   'user-approved': 'users',
   'user-blocked': 'users',
   'user-role-changed': 'users',
+  'user-deleted': 'users',
   'receipt-added': 'split',
   'receipt-deleted': 'split',
   'split-comment': 'split',

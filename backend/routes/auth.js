@@ -176,6 +176,28 @@ adminRouter.post('/users/:id/block', requireAdmin, (req, res) => {
   res.json({ ok: true });
 });
 
+/**
+ * DELETE /api/admin/users/:id — remove the account from this location entirely.
+ *
+ * Blocking keeps the record and bars the door; this removes it. Nothing references a user by
+ * id — approved_by holds an email and the audit trail denormalizes the actor — so the row can
+ * go without leaving anything dangling.
+ *
+ * Refusing to delete yourself is the only guard needed: reaching here at all means being an
+ * approved admin, so a location can never be left without one.
+ */
+adminRouter.delete('/users/:id', requireAdmin, (req, res) => {
+  const id = Number(req.params.id);
+  if (id === req.user.id) return res.status(400).json({ error: "You can't delete your own account" });
+
+  const target = req.db.prepare('SELECT * FROM users WHERE id = ?').get(id);
+  if (!target) return res.status(404).json({ error: 'User not found' });
+
+  req.db.prepare('DELETE FROM users WHERE id = ?').run(id);
+  logAudit(req, { action: 'user-deleted', detail: `Removed ${target.email}` });
+  res.json({ ok: true, id });
+});
+
 adminRouter.post('/users/:id/role', requireAdmin, (req, res) => {
   const id = Number(req.params.id);
   const role = req.body?.role;
