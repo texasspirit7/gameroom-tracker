@@ -71,7 +71,7 @@ describe('the owner account cannot be disabled by anyone', () => {
     await signInAsOwner(ctx.baseUrl, 'h');
     const hRows = await roster(hAdmin);
     const hOwner = hRows.find((u) => u.email === OWNER);
-    assert.ok(hOwner, 'the owner has an account in Houston too');
+    assert.ok(hOwner, 'the owner has an account in Helsinki too');
     const res = await fetch(`${ctx.baseUrl}/api/admin/users/${hOwner.id}`, {
       method: 'DELETE', headers: { Cookie: hAdmin },
     });

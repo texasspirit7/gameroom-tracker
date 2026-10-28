@@ -11,7 +11,7 @@ export const LOCATIONS = {
   la: {
     key: 'la',
     label: 'What happened in La',
-    name: 'La Pryor',
+    name: 'London',
     // The original single-location database, kept under its old name so the live data needs
     // no migration — it simply becomes La's.
     dbFile: 'gameroom.db',
@@ -28,7 +28,7 @@ export const LOCATIONS = {
   h: {
     key: 'h',
     label: 'What happened in H',
-    name: 'Houston',
+    name: 'Helsinki',
     dbFile: 'h.db',
     split: { a: 0.5, b: 0.5 },
     // No history to close out — H starts from its first sheet.

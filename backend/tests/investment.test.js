@@ -43,7 +43,7 @@ describe('the quoted budget', () => {
 
   test('is not seeded for a location with no setup investment', async () => {
     const res = await fetch(`${ctx.baseUrl}/api/investment`, { headers: { Cookie: la } });
-    assert.equal(res.status, 404, 'La Pryor tracks no setup investment');
+    assert.equal(res.status, 404, 'London tracks no setup investment');
   });
 
   test('starts with nothing released', async () => {

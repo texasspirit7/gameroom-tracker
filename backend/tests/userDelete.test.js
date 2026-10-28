@@ -62,7 +62,7 @@ describe('removing a user from a location', () => {
     await del(inLa.id);
 
     const hRoster = await (await fetch(`${ctx.baseUrl}/api/admin/users`, { headers: { Cookie: hAdmin } })).json();
-    assert.ok(hRoster.some((u) => u.email === 'both@test.local'), 'still has access to Houston');
+    assert.ok(hRoster.some((u) => u.email === 'both@test.local'), 'still has access to Helsinki');
   });
 });
 

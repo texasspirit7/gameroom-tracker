@@ -70,7 +70,7 @@ describe('switching without signing out', () => {
     const user = await me(cookie);
     assert.equal(user.location, 'h');
     assert.equal((await (await fetch(`${ctx.baseUrl}/api/sheets`, { headers: { Cookie: cookie } })).json()).length, 0,
-      'Houston has no sheets of its own');
+      'Helsinki has no sheets of its own');
   });
 
   test('and back again, with La’s data intact', async () => {

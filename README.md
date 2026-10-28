@@ -1,6 +1,6 @@
 # Game Room Tracker
 
-Daily reconciliation-sheet tracker for the La Pryor game room. Upload the daily
+Daily reconciliation-sheet tracker for the London game room. Upload the daily
 sheet (Excel or a photo), the data is extracted and validated, and dashboards
 show profit trends, per-machine analytics, and cash-control alerts.
 
