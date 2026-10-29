@@ -1,0 +1,47 @@
+# The test suites, as one reusable unit so the PR check and the deploy gate cannot drift apart.
+name: Tests
+
+on:
+  workflow_call: {}
+
+jobs:
+  regression:
+    name: Regression suite (node)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: npm
+          cache-dependency-path: |
+            backend/package-lock.json
+            frontend/package-lock.json
+      - run: npm run install:all
+      - run: npm test
+
+  e2e:
+    name: End-to-end (python)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: npm
+          cache-dependency-path: |
+            backend/package-lock.json
+            frontend/package-lock.json
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+          cache: pip
+          cache-dependency-path: e2e/requirements.txt
+
+      - run: npm run install:all
+      # Built so the end-to-end run covers the app shell being served, not just the API.
+      - run: npm run build
+      - run: pip install -r e2e/requirements.txt
+
+      - run: pytest -v
+        working-directory: e2e

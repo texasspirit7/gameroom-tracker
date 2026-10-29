@@ -8,3 +8,8 @@ data/
 uploads/
 .claude/*
 !.claude/skills/
+
+# python e2e
+.venv-e2e/
+__pycache__/
+.pytest_cache/

@@ -15,6 +15,22 @@ optional: `npm test` before and after every change, a regression test in the sam
 every bug fix, and after deploying, grep the live bundle for the change — a green pipeline is
 not proof.
 
+There are **two suites**, and both gate the deploy:
+
+| | what it does | run it |
+|---|---|---|
+| `backend/tests/*.test.js` | imports the Express app in-process, hits the real routes | `npm test` |
+| `e2e/` (pytest) | spawns `node backend/server.js` and drives it over HTTP | `cd e2e && pytest` |
+
+The end-to-end suite covers what in-process tests structurally cannot: server startup, config
+read from the environment, SQLite on a real directory, the built frontend being served, and the
+read-only checks that run against production after a deploy (`pytest -m production`, needing
+`E2E_BASE_URL`). One server per test file, each on its own port and empty data directory.
+
+Put a test where it belongs: a formula or a route contract belongs in the node suite, which is
+faster and more precise. A journey across several routes, or anything about how the process is
+configured and started, belongs in `e2e/`.
+
 ## Two locations, two databases
 
 `backend/locations.js` is the registry and the only place the two locations are described.

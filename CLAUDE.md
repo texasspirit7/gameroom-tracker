@@ -25,6 +25,22 @@ Every test in this suite exists because something broke in production first:
 
 **When you fix a bug, add a regression test for it in the same commit — that's how this list grows.**
 
+## Two suites
+
+```bash
+npm test                                   # 339 in-process regression tests
+cd e2e && pytest                           # end-to-end: real server, real HTTP, real SQLite
+```
+
+`backend/tests/*.test.js` imports the Express app into the test process. `e2e/` spawns
+`node backend/server.js` the way Azure does and talks to it over a socket, covering the seams
+the in-process tests cannot — startup, config read from the environment, and the built frontend
+being served. `e2e/README.md` has the setup.
+
+**Both run in GitHub Actions and both gate the deploy** (`.github/workflows/tests.yml`, called
+by `ci.yml` for branches and PRs and by `deploy.yml` for main). Until Oct 2026 CI ran no tests
+at all, so a push with a red suite deployed to production regardless. Keep that gate.
+
 ## Deploy loop
 
 1. `npm test` — must pass.
@@ -36,7 +52,9 @@ Every test in this suite exists because something broke in production first:
    incident that had nothing to do with the code). Only restart if `/api/health` is genuinely unhealthy.
 4. For frontend changes, also verify the actual deployed bundle contains the change
    (`curl` the `/assets/index-*.js` referenced by the homepage and `grep` for a distinctive string) —
-   a green deploy + healthy server does not by itself prove the feature is live.
+   a green deploy + healthy server does not by itself prove the feature is live. The `smoke` job
+   in `deploy.yml` now does the generic half of this automatically (`pytest -m production`), but
+   it cannot know what *your* change was — still grep for it yourself.
 
 ## Rollback
 

@@ -1,0 +1,13 @@
+# Runs on everything that is not main. Pushes to main are gated by deploy.yml instead, so the
+# same commit is never tested twice.
+name: CI
+
+on:
+  push:
+    branches-ignore: [main]
+  pull_request:
+    branches: [main]
+
+jobs:
+  tests:
+    uses: ./.github/workflows/tests.yml
