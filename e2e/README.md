@@ -6,7 +6,7 @@ the in-process tests cannot: startup, config read from the environment, SQLite o
 directory, and the built frontend being served.
 
 ```bash
-python3 -m venv .venv && . .venv/bin/activate
+python3 -m venv .venv-e2e && . .venv-e2e/bin/activate
 pip install -r e2e/requirements.txt
 npm run build          # optional; covers the app shell being served
 cd e2e && pytest -v
