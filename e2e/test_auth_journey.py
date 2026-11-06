@@ -13,7 +13,7 @@ def test_identify_then_enter(server):
     assert session.get(server.url('/api/sheets'), timeout=10).status_code == 401
 
     offered = {loc['key'] for loc in identified.json()['locations']}
-    assert offered == {'la', 'h'}, 'an admin address reaches both locations'
+    assert offered == {'la', 'h', 'p'}, 'an admin address reaches every location'
 
     entered = session.post(server.url('/api/auth/enter'), json={'location': 'la'}, timeout=10)
     assert entered.status_code == 200
@@ -23,7 +23,9 @@ def test_identify_then_enter(server):
 def test_the_session_knows_where_it_is(admin, server):
     user = admin.get(server.url('/api/auth/me'), timeout=10).json()['user']
     assert user['location'] == 'la'
-    assert {loc['key']: loc['name'] for loc in user['locations']} == {'la': 'London', 'h': 'Helsinki'}
+    assert {loc['key']: loc['name'] for loc in user['locations']} == {
+        'la': 'London', 'h': 'Helsinki', 'p': 'Poland',
+    }
 
 
 def test_switching_location_moves_the_session(server):

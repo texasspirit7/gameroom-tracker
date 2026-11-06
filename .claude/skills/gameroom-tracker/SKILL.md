@@ -33,12 +33,16 @@ configured and started, belongs in `e2e/`.
 
 ## Two locations, two databases
 
-`backend/locations.js` is the registry and the only place the two locations are described.
+`backend/locations.js` is the registry and the only place the locations are described. Adding
+one is a single entry there: `app.js` opens every key in `LOCATION_KEYS` at boot and creates
+the SQLite file and schema for any that does not exist yet, so there is no migration step. The
+tests that enumerate the locations by hand are the only other thing to update.
 
 | | key | name (inside the app) | label (sign-in) | split | db file |
 |---|---|---|---|---|---|
 | | `la` | London | "What happened in La" | 40/60 | `gameroom.db` |
 | | `h` | Helsinki | "What happened in H" | 50/50 | `h.db` |
+| | `p` | Poland | "What happened in P" | 50/50 | `p.db` |
 
 Three distinct identifiers, and conflating them is the easy mistake:
 

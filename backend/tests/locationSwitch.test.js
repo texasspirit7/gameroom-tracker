@@ -47,9 +47,9 @@ const switchTo = (cookie, location) =>
   });
 
 describe('an account is told where it may go', () => {
-  test('an admin listed in ADMIN_EMAILS can reach both', async () => {
+  test('an admin listed in ADMIN_EMAILS can reach every location', async () => {
     const user = await me(la);
-    assert.deepEqual(user.locations.map((l) => l.key).sort(), ['h', 'la']);
+    assert.deepEqual(user.locations.map((l) => l.key).sort(), ['h', 'la', 'p']);
     assert.equal(user.location, 'la', 'and is currently in La');
   });
 
