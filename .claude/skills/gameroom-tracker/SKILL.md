@@ -40,18 +40,22 @@ tests that enumerate the locations by hand are the only other thing to update.
 
 | | key | name (inside the app) | label (sign-in) | split | db file |
 |---|---|---|---|---|---|
-| | `la` | London | "What happened in La" | 40/60 | `gameroom.db` |
-| | `h` | Helsinki | "What happened in H" | 50/50 | `h.db` |
-| | `a` | Alaska | "What happened in A" | 50/50 | `p.db` |
+| | `la` | London | "What happened in London" | 40/60 | `gameroom.db` |
+| | `h` | Helsinki | "What happened in Helsinki" | 50/50 | `h.db` |
+| | `a` | Alaska | "What happened in Alaska" | 50/50 | `p.db` |
 
 Three distinct identifiers, and conflating them is the easy mistake:
 
 - **key** (`la`, `h`) — baked into live session cookies and into the SQLite filenames on disk.
   Changing one invalidates every signed-in session and orphans a database file. Treat as frozen.
 - **name** — what you see once you are inside. Safe to rename; pinned by
-  `backend/tests/locationNames.test.js`.
-- **label** — the sign-in wording, shown to anyone who loads the site, so it deliberately says
-  less than the inside of the app does. Keep the names out of it.
+  `backend/tests/locationNames.test.js`, which also checks each label still names its location.
+  The database filename does not follow a rename: London's is still `gameroom.db` and Alaska's
+  is still `p.db`. Nothing displays it, and renaming a live SQLite file risks data for tidiness.
+- **label** — the sign-in wording, shown to anyone who loads the site. It carried only an
+  initial until Nov 2026 so the public page gave nothing away; that was dropped on request,
+  because picking the right one off "La" and "H" meant knowing the convention. It now names
+  the location, and a test asserts it still does.
 
 Separation is **physical, not a `WHERE` clause**: each location gets its own SQLite file, so a
 query that forgets to filter cannot reach the other location's money — the rows are not in the

@@ -10,7 +10,7 @@
 export const LOCATIONS = {
   la: {
     key: 'la',
-    label: 'What happened in La',
+    label: 'What happened in London',
     name: 'London',
     // The original single-location database, kept under its old name so the live data needs
     // no migration — it simply becomes La's.
@@ -27,7 +27,7 @@ export const LOCATIONS = {
   },
   h: {
     key: 'h',
-    label: 'What happened in H',
+    label: 'What happened in Helsinki',
     name: 'Helsinki',
     dbFile: 'h.db',
     split: { a: 0.5, b: 0.5 },
@@ -64,7 +64,7 @@ export const LOCATIONS = {
   },
   a: {
     key: 'a',
-    label: 'What happened in A',
+    label: 'What happened in Alaska',
     name: 'Alaska',
     // Kept under the name it was created with, the same way La's file is still gameroom.db:
     // the key is what the app is addressed by, and renaming a live SQLite file buys nothing
@@ -87,6 +87,6 @@ export const DEFAULT_LOCATION = 'la';
 export const isLocation = (key) => Object.hasOwn(LOCATIONS, key);
 export const locationOf = (key) => LOCATIONS[key] ?? null;
 
-/** What the sign-in screen needs: no database paths or financial terms. */
+/** What the sign-in screen needs: the name to pick from, and no database paths or financial terms. */
 export const publicLocations = () =>
   LOCATION_KEYS.map((k) => ({ key: k, label: LOCATIONS[k].label }));

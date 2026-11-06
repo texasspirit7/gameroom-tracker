@@ -34,12 +34,13 @@ describe('location display names', () => {
     );
   });
 
-  // The sign-in screen is shown to anyone who loads the site, so it deliberately says less
-  // than the inside of the app does.
-  test('the sign-in labels do not give the names away', async () => {
+  // The sign-in screen used to carry only an initial, so the public page gave nothing away.
+  // That was dropped deliberately: picking the right one off "La" and "H" meant knowing the
+  // convention, and the names are what people actually recognise.
+  test('the sign-in labels name their location', async () => {
     const user = await me();
-    for (const { label } of user.locations) {
-      assert.ok(!/london|helsinki|alaska/i.test(label), `sign-in label leaks a name: ${label}`);
+    for (const { label, name } of user.locations) {
+      assert.ok(label.includes(name), `label "${label}" does not name ${name}`);
     }
   });
 });
