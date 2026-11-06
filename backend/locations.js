@@ -62,10 +62,13 @@ export const LOCATIONS = {
       ],
     },
   },
-  p: {
-    key: 'p',
-    label: 'What happened in P',
+  a: {
+    key: 'a',
+    label: 'What happened in A',
     name: 'Alaska',
+    // Kept under the name it was created with, the same way La's file is still gameroom.db:
+    // the key is what the app is addressed by, and renaming a live SQLite file buys nothing
+    // that is worth a migration.
     dbFile: 'p.db',
     split: { a: 0.5, b: 0.5 },
     // Nothing to close out — Alaska starts from its first sheet.

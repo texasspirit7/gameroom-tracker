@@ -20,7 +20,7 @@ def helsinki(server):
 
 @pytest.fixture(scope='module')
 def alaska(server):
-    return sign_in(server.base_url, ADMIN, 'p')
+    return sign_in(server.base_url, ADMIN, 'a')
 
 
 def test_a_sheet_in_london_is_invisible_in_helsinki(london, helsinki, server):

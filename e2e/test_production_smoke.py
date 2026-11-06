@@ -28,7 +28,7 @@ def test_the_site_is_healthy():
 
 def test_it_is_serving_the_expected_locations():
     body = requests.get(f'{BASE_URL}/api/auth/config', timeout=30).json()
-    assert body['locationNames'] == {'la': 'London', 'h': 'Helsinki', 'p': 'Alaska'}
+    assert body['locationNames'] == {'la': 'London', 'h': 'Helsinki', 'a': 'Alaska'}
 
 
 def test_production_requires_google_sign_in():

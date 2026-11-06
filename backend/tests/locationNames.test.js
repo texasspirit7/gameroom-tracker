@@ -23,14 +23,14 @@ const me = async () =>
 describe('location display names', () => {
   test('the config route names every location', async () => {
     const cfg = await config();
-    assert.deepEqual(cfg.locationNames, { la: 'London', h: 'Helsinki', p: 'Alaska' });
+    assert.deepEqual(cfg.locationNames, { la: 'London', h: 'Helsinki', a: 'Alaska' });
   });
 
   test('a session carries the name of each location it can reach', async () => {
     const user = await me();
     assert.deepEqual(
       user.locations.map((l) => [l.key, l.name]).sort(),
-      [['h', 'Helsinki'], ['la', 'London'], ['p', 'Alaska']],
+      [['a', 'Alaska'], ['h', 'Helsinki'], ['la', 'London']],
     );
   });
 
