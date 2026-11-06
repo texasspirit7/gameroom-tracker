@@ -12,7 +12,7 @@ def test_health_reports_ok(server):
 
 def test_config_names_both_locations(server):
     body = requests.get(server.url('/api/auth/config'), timeout=10).json()
-    assert body['locationNames'] == {'la': 'London', 'h': 'Helsinki', 'p': 'Poland'}
+    assert body['locationNames'] == {'la': 'London', 'h': 'Helsinki', 'p': 'Alaska'}
     assert body['authProvider'] == 'local'
 
 

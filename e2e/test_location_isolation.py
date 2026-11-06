@@ -19,7 +19,7 @@ def helsinki(server):
 
 
 @pytest.fixture(scope='module')
-def poland(server):
+def alaska(server):
     return sign_in(server.base_url, ADMIN, 'p')
 
 
@@ -53,29 +53,29 @@ def test_each_location_keeps_its_own_split_terms(london, helsinki, server):
     assert helsinki.get(server.url('/api/profit-split'), timeout=10).status_code == 200
 
 
-def test_poland_has_a_database_of_its_own(london, helsinki, poland, server):
+def test_alaska_has_a_database_of_its_own(london, helsinki, alaska, server):
     """
     Added third. Its own SQLite file is the whole point: a sheet here must be invisible from
     the other two, and theirs from here.
     """
-    assert poland.get(server.url('/api/sheets'), timeout=10).json() == []
+    assert alaska.get(server.url('/api/sheets'), timeout=10).json() == []
 
-    upload_sheet(poland, server.base_url, build_sheet_xlsx(total_in=700), sheet_date='2026-05-04')
+    upload_sheet(alaska, server.base_url, build_sheet_xlsx(total_in=700), sheet_date='2026-05-04')
 
-    assert [s['sheet_date'] for s in poland.get(server.url('/api/sheets'), timeout=10).json()] == ['2026-05-04']
+    assert [s['sheet_date'] for s in alaska.get(server.url('/api/sheets'), timeout=10).json()] == ['2026-05-04']
     for elsewhere in (london, helsinki):
         dates = [s['sheet_date'] for s in elsewhere.get(server.url('/api/sheets'), timeout=10).json()]
         assert '2026-05-04' not in dates
 
 
-def test_poland_splits_fifty_fifty(poland, server):
+def test_alaska_splits_fifty_fifty(alaska, server):
     """A location with no close-out starts at zero, and takes half of what it earns."""
-    upload_sheet(poland, server.base_url, build_sheet_xlsx(total_in=4000, total_out=1000), sheet_date='2026-05-11')
+    upload_sheet(alaska, server.base_url, build_sheet_xlsx(total_in=4000, total_out=1000), sheet_date='2026-05-11')
 
-    account = poland.get(server.url('/api/profit-split'), timeout=10).json()['account']
+    account = alaska.get(server.url('/api/profit-split'), timeout=10).json()['account']
     assert account['received_total'] == 0, 'nothing was closed out here'
     assert account['owed_total'] == pytest.approx(0.5 * (700 + 3000), abs=0.01)
 
 
-def test_poland_tracks_no_investment(poland, server):
-    assert poland.get(server.url('/api/investment'), timeout=10).status_code == 404
+def test_alaska_tracks_no_investment(alaska, server):
+    assert alaska.get(server.url('/api/investment'), timeout=10).status_code == 404

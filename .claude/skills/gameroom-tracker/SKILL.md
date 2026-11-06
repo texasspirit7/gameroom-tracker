@@ -42,7 +42,7 @@ tests that enumerate the locations by hand are the only other thing to update.
 |---|---|---|---|---|---|
 | | `la` | London | "What happened in La" | 40/60 | `gameroom.db` |
 | | `h` | Helsinki | "What happened in H" | 50/50 | `h.db` |
-| | `p` | Poland | "What happened in P" | 50/50 | `p.db` |
+| | `p` | Alaska | "What happened in P" | 50/50 | `p.db` |
 
 Three distinct identifiers, and conflating them is the easy mistake:
 

@@ -24,7 +24,7 @@ def test_the_session_knows_where_it_is(admin, server):
     user = admin.get(server.url('/api/auth/me'), timeout=10).json()['user']
     assert user['location'] == 'la'
     assert {loc['key']: loc['name'] for loc in user['locations']} == {
-        'la': 'London', 'h': 'Helsinki', 'p': 'Poland',
+        'la': 'London', 'h': 'Helsinki', 'p': 'Alaska',
     }
 
 

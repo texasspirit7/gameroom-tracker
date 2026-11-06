@@ -65,10 +65,10 @@ export const LOCATIONS = {
   p: {
     key: 'p',
     label: 'What happened in P',
-    name: 'Poland',
+    name: 'Alaska',
     dbFile: 'p.db',
     split: { a: 0.5, b: 0.5 },
-    // Nothing to close out — Poland starts from its first sheet.
+    // Nothing to close out — Alaska starts from its first sheet.
     closeOut: null,
     // No running target set yet; the split page shows the running total with nothing to
     // measure it against until there is one.
