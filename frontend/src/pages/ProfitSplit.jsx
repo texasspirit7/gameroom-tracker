@@ -222,7 +222,12 @@ export default function ProfitSplit() {
 
   const { rows, account } = data;
   const earningWeeks = rows.filter((r) => !r.closed && r.amount_40 > 0).length;
-  const splitLabel = `${Math.round(account.split_a * 100)}/${Math.round(account.split_b * 100)}`;
+  // Derived from the location's own terms, never written down here: La runs 40/60 and the
+  // others 50/50, and a hard-coded header contradicting the figures beside it is worse than
+  // no header at all.
+  const pctOwed = Math.round(account.split_a * 100);
+  const pctSide = Math.round(account.split_b * 100);
+  const splitLabel = `${pctOwed}/${pctSide}`;
   const targetPct = account.target
     ? `${Math.min(100, (account.owed_total / account.target) * 100)}%`
     : '0%';
@@ -411,8 +416,8 @@ export default function ProfitSplit() {
               <tr>
                 <th>Period</th>
                 <th>Net Profit</th>
-                <th title="What this week added to what you're owed">Owed (40%)</th>
-                <th>60% Side</th>
+                <th title="What this week added to what you're owed">Owed ({pctOwed}%)</th>
+                <th>{pctSide}% Side</th>
                 <th title="Cumulative amount owed">Running Total</th>
                 <th title="Payments fill the oldest periods first">Coverage</th>
                 <th>Comments</th>
@@ -428,7 +433,7 @@ export default function ProfitSplit() {
                       {r.closed && <span className="badge verified" style={{ marginLeft: 8 }}>closed</span>}
                     </td>
                     {/* The closed period is a settled lump sum, not a computed week — it has no
-                        net profit or 60% side to show. */}
+                        net profit or other side to show. */}
                     <td className={r.closed ? 'muted' : (r.net_profit >= 0 ? 'pos' : 'neg')}>
                       {r.closed ? '—' : signedMoney(r.net_profit)}
                     </td>
