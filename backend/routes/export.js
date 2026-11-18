@@ -89,17 +89,18 @@ exportRouter.get('/expenses.csv', (req, res) => {
 exportRouter.get('/profit-split.csv', adminGate, (req, res) => {
   const loc = locationOf(req.location);
   const rows = buildProfitSplitRows(req.db, loc);
-  // Headed with this location's own shares. The column keys still say 40/60 — they are the
-  // original two-party names and the API contract — but a Helsinki export headed "40%" over
-  // half the net profit is simply wrong.
+  // Headed with this location's own shares, worded as the page words them. The column keys
+  // still say 40/60 — they are the original two-party names and the API contract — but a
+  // Helsinki export headed "40%" over half the net profit is simply wrong. Naming the sides
+  // rather than only the percentages also keeps the two columns distinct at 50/50.
   const pctOwed = Math.round(loc.split.a * 100);
   const pctSide = Math.round(loc.split.b * 100);
   const csv = toCsv([
     { key: 'period_start', label: 'Week Starting' },
     { key: 'period_end', label: 'Week Ending' },
     { key: 'net_profit', label: 'Net Profit' },
-    { key: 'amount_40', label: `${pctOwed}% Amount` },
-    { key: 'amount_60', label: `${pctSide}% Amount` },
+    { key: 'amount_40', label: `Owed (${pctOwed}%)` },
+    { key: 'amount_60', label: `${pctSide}% Side` },
     { key: 'owed_running', label: 'Running Total Owed' },
     { key: 'applied', label: 'Received Against' },
     { key: 'coverage', label: 'Coverage' },

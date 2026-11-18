@@ -112,8 +112,9 @@ describe('/api/export — CSV downloads', () => {
     const res = await fetch(`${ctx.baseUrl}/api/export/profit-split.csv`, { headers: { Cookie: hCookie } });
     const { header } = parseCsv(await res.text());
 
-    assert.deepEqual(header.slice(3, 5), ['50% Amount', '50% Amount'],
-      'H runs 50/50 — a column headed 40% over half the net profit is simply wrong');
+    assert.deepEqual(header.slice(3, 5), ['Owed (50%)', '50% Side'],
+      'H runs 50/50 — a column headed 40% over half the net profit is simply wrong, and at '
+      + 'an even split the two columns still have to be told apart');
   });
 
   test('profit-split.csv reflects the same weekly split as the JSON endpoint', async () => {
@@ -123,7 +124,7 @@ describe('/api/export — CSV downloads', () => {
 
     const csvRes = await fetch(`${ctx.baseUrl}/api/export/profit-split.csv`, { headers: { Cookie: adminCookie } });
     const { header, rows } = parseCsv(await csvRes.text());
-    assert.deepEqual(header, ['Week Starting', 'Week Ending', 'Net Profit', '40% Amount', '60% Amount',
+    assert.deepEqual(header, ['Week Starting', 'Week Ending', 'Net Profit', 'Owed (40%)', '60% Side',
       'Running Total Owed', 'Received Against', 'Coverage', 'Notes'], 'La runs 40/60');
 
     const csvRow = rows.find((r) => r[0] === week.period_start);
